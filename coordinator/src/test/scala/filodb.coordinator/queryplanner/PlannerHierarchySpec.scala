@@ -58,7 +58,7 @@ class PlannerHierarchySpec extends AnyFunSpec with Matchers with PlanValidationS
   private val rrRetention = 30.days.toMillis
   val recordingRulesPlanner = new SingleClusterPlanner(dataset, schemas, mapperRef,
     earliestRetainedTimestampFn = now - rrRetention,
-    queryConfig, ClusterType.recordingRules)
+    queryConfig, ClusterType.recordingrules)
 
   private val plannerSelector = (metricName: String) => {
     if (metricName.contains(":1m")) "recordingRules" else "longTerm"

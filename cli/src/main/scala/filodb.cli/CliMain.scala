@@ -17,6 +17,7 @@ import org.scalactic._
 import filodb.coordinator._
 import filodb.coordinator.client._
 import filodb.coordinator.client.QueryCommands.StaticSpreadProvider
+import filodb.coordinator.queryplanner.ClusterType
 import filodb.coordinator.queryplanner.SingleClusterPlanner
 import filodb.core._
 import filodb.core.binaryrecord2.RecordBuilder

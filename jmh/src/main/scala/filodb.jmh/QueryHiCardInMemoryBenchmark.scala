@@ -13,6 +13,7 @@ import monix.eval.Task
 import monix.reactive.Observable
 import org.openjdk.jmh.annotations._
 
+import filodb.coordinator.queryplanner.ClusterType
 import filodb.coordinator.queryplanner.SingleClusterPlanner
 import filodb.core.binaryrecord2.RecordContainer
 import filodb.core.memstore.{SomeData, TimeSeriesMemStore}
@@ -101,7 +102,7 @@ class QueryHiCardInMemoryBenchmark extends StrictLogging {
 
   // Stuff for directly executing queries ourselves
   val engine = new SingleClusterPlanner(dataset, Schemas(dataset.schema), shardMapper, 0,
-    queryConfig, "raw")
+    queryConfig, ClusterType.raw)
 
   val numQueries = 100       // Please make sure this number matches the OperationsPerInvocation below
   val queryIntervalSec = samplesDuration.toSeconds  // # minutes between start and stop
