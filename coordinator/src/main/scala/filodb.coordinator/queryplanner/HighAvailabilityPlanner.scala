@@ -144,4 +144,8 @@ class HighAvailabilityPlanner(dsRef: DatasetRef,
       routeExecPlanMapper(routes, logicalPlan, qContext, lookBackTime)
     }
   }
+
+  override def getRawClusterPlanner(): Option[SingleClusterPlanner] = {
+    return this.localPlanner.getRawClusterPlanner();
+  }
 }

@@ -195,4 +195,8 @@ class ShardKeyRegexPlanner(val dataset: Dataset,
     }
     PlanResult(Seq(exec))
   }
+
+  override def getRawClusterPlanner(): Option[SingleClusterPlanner] = {
+    return queryPlanner.getRawClusterPlanner()
+  }
 }

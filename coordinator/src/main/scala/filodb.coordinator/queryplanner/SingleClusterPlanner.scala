@@ -544,4 +544,8 @@ class SingleClusterPlanner(val dataset: Dataset,
     }
     PlanResult(metaExec, false)
   }
+
+  override def getRawClusterPlanner(): Option[SingleClusterPlanner] = {
+    return if (clusterType == ClusterType.raw) Some(this) else None
+  }
 }

@@ -206,4 +206,9 @@ import filodb.query.exec._
   override def materialize(logicalPlan: LogicalPlan, qContext: QueryContext): ExecPlan = {
     walkLogicalPlanTree(logicalPlan, qContext).plans.head
   }
+
+  // TODO(a_theimer): rawClusterPlanner should be explicitly typed?
+  override def getRawClusterPlanner(): Option[SingleClusterPlanner] = {
+    return Some(this.rawClusterPlanner.asInstanceOf[SingleClusterPlanner]);
+  }
 }

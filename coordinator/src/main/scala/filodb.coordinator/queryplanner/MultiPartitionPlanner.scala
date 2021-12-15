@@ -438,4 +438,8 @@ class MultiPartitionPlanner(partitionLocationProvider: PartitionLocationProvider
     MetadataRemoteExec(httpEndpoint, remoteHttpTimeoutMs,
       urlParams, finalQueryContext, inProcessPlanDispatcher, dataset.ref, remoteExecHttpClient)
   }
+
+  override def getRawClusterPlanner(): Option[SingleClusterPlanner] = {
+    return localPartitionPlanner.getRawClusterPlanner()
+  }
 }

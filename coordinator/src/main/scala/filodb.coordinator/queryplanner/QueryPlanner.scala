@@ -38,4 +38,7 @@ trait QueryPlanner {
       execPlan.dispatcher.dispatch(execPlan)
     }
   }
+
+  // TODO(a_theimer): document
+  def getRawClusterPlanner() : Option[SingleClusterPlanner] = ???
 }

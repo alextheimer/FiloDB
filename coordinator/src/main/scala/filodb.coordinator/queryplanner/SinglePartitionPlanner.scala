@@ -123,9 +123,15 @@ class SinglePartitionPlanner(planners: Map[String, QueryPlanner],
     val execPlans = planners.filter{case (name, _) => name.startsWith("raw")}
                             .values.toList.distinct
                             .map(_.materialize(logicalPlan, qContext))
-    assert(execPlans.size == 1,
-      s"exactly 1 planner name should match the 'raw' filter, but ${execPlans.size} planners matched")
+    assert(execPlans.size == 1, "TODO")
     execPlans.head
+  }
+
+  override def getRawClusterPlanner(): Option[SingleClusterPlanner] = {
+    val rawSeq = planners.values.map(p => p.getRawClusterPlanner()).filter(opt => opt.nonEmpty).toSeq
+    assert(rawSeq.size == 1,
+      s"exactly 1 planner should be raw, but found ${rawSeq.size} raw planners")
+    rawSeq.head
   }
 }
 
