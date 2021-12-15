@@ -42,9 +42,9 @@ class SinglePartitionPlannerSpec extends AnyFunSpec with Matchers {
   private val promQlQueryParams = PromQlQueryParams("sum(heap_usage)", 100, 1, 1000)
 
   val localPlanner = new SingleClusterPlanner(dataset, schemas, localMapper, earliestRetainedTimestampFn = 0, queryConfig,
-    "raw")
+    ClusterType.raw)
   val remotePlanner = new SingleClusterPlanner(dataset, schemas, remoteMapper, earliestRetainedTimestampFn = 0,
-    queryConfig, "raw")
+    queryConfig, ClusterType.raw)
 
   val failureProvider = new FailureProvider {
     override def getFailures(datasetRef: DatasetRef, queryTimeRange: TimeRange): Seq[FailureTimeRange] = {
@@ -165,7 +165,7 @@ class SinglePartitionPlannerSpec extends AnyFunSpec with Matchers {
     //   SPP::materializeTsCardinalities is working. See there for additional details.
 
     val localPlanner = new SingleClusterPlanner(
-      dataset, schemas, localMapper, earliestRetainedTimestampFn = 0, queryConfig, "raw-temp")
+      dataset, schemas, localMapper, earliestRetainedTimestampFn = 0, queryConfig, ClusterType.raw)
     val planners = Map("raw-temp" -> localPlanner, "rules1" -> rrPlanner1, "rules2" -> rrPlanner2)
     val engine = new SinglePartitionPlanner(planners, plannerSelector, "_metric_", queryConfig)
     val lp = TsCardinalities(Seq("a", "b"), 2)

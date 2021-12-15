@@ -7,6 +7,7 @@ import com.typesafe.config.ConfigFactory
 import org.scalatest.concurrent.ScalaFutures
 
 import filodb.coordinator.{ActorSpecConfig, ActorTest, ShardMapper}
+import filodb.coordinator.queryplanner.ClusterType
 import filodb.coordinator.queryplanner.SingleClusterPlanner
 import filodb.core.{query, MachineMetricsData, SpreadChange}
 import filodb.core.binaryrecord2.BinaryRecordRowReader
@@ -183,7 +184,7 @@ class SerializationSpec extends ActorTest(SerializationSpecConfig.getNewSystem) 
     mapper.registerNode(Seq(0), node0)
     def mapperRef: ShardMapper = mapper
     val engine = new SingleClusterPlanner(dataset, Schemas.global, mapperRef, 0,
-      queryConfig, "raw")
+      queryConfig, ClusterType.raw)
     val f1 = Seq(ColumnFilter("__name__", Filter.Equals("http_request_duration_seconds_bucket")),
       ColumnFilter("job", Filter.Equals("myService")),
       ColumnFilter("le", Filter.Equals("0.3")),
@@ -223,7 +224,7 @@ class SerializationSpec extends ActorTest(SerializationSpecConfig.getNewSystem) 
     val from = to - 50
     val qParams = TimeStepParams(from, 10, to)
     val engine = new SingleClusterPlanner(dataset, Schemas.global, mapperRef, 0,
-      queryConfig, "raw")
+      queryConfig, ClusterType.raw)
 
     val logicalPlan1 = Parser.queryRangeToLogicalPlan(
       s"""sum(rate(http_request_duration_seconds_bucket{job="prometheus",$shardKeyStr}[20s])) by (handler)""",
@@ -259,7 +260,7 @@ class SerializationSpec extends ActorTest(SerializationSpecConfig.getNewSystem) 
     val from = to - 50
     val qParams = TimeStepParams(from, 10, to)
     val engine = new SingleClusterPlanner(dataset, Schemas.global, mapperRef, 0,
-      queryConfig, "raw")
+      queryConfig, ClusterType.raw)
 
     // with column filters having shardcolumns
     val logicalPlan1 = Parser.metadataQueryToLogicalPlan(
@@ -342,7 +343,7 @@ class SerializationSpec extends ActorTest(SerializationSpecConfig.getNewSystem) 
     val from = to - 50
     val qParams = TimeStepParams(from, 10, to)
     val engine = new SingleClusterPlanner(dataset, Schemas.global, mapperRef, 0,
-      queryConfig, "raw")
+      queryConfig, ClusterType.raw)
 
     val logicalPlan = Parser.queryRangeToLogicalPlan(
       s"""http_request_duration_seconds_bucket{job="prometheus",$shardKeyStr}""",

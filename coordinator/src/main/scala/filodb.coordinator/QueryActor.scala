@@ -17,6 +17,7 @@ import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ValueReader
 
 import filodb.coordinator.queryplanner.SingleClusterPlanner
+import filodb.coordinator.queryplanner.ClusterType
 import filodb.core._
 import filodb.core.memstore.{FiloSchedulers, MemStore, TermInfo}
 import filodb.core.memstore.ratelimit.CardinalityRecord
@@ -75,7 +76,7 @@ final class QueryActor(memStore: MemStore,
   logger.info(s"Starting QueryActor and QueryEngine for ds=$dsRef schemas=$schemas")
   val queryConfig = new QueryConfig(config.getConfig("filodb.query"))
   val queryPlanner = new SingleClusterPlanner(dataset, schemas, shardMapFunc,
-                                              earliestRawTimestampFn, queryConfig, "raw",
+                                              earliestRawTimestampFn, queryConfig, ClusterType.raw,
                                               functionalSpreadProvider)
   val queryScheduler = createInstrumentedQueryScheduler()
 

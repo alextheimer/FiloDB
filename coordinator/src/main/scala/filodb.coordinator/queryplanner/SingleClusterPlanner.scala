@@ -42,7 +42,7 @@ class SingleClusterPlanner(val dataset: Dataset,
                            shardMapperFunc: => ShardMapper,
                            earliestRetainedTimestampFn: => Long,
                            val queryConfig: QueryConfig,
-                           clusterName: String,
+                           clusterType: ClusterType,
                            spreadProvider: SpreadProvider = StaticSpreadProvider(),
                            timeSplitEnabled: Boolean = false,
                            minTimeRangeForSplitMs: => Long = 1.day.toMillis,
@@ -60,7 +60,7 @@ class SingleClusterPlanner(val dataset: Dataset,
       logger.debug(s"ShardMapper: $shardMapperFunc")
       throw new RuntimeException(s"Shard: $shard is not available") // TODO fix this
     }
-    ActorPlanDispatcher(targetActor, clusterName)
+    ActorPlanDispatcher(targetActor, "clusterName")  // TODO(a_theimer)
   }
 
   /**

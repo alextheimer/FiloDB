@@ -42,11 +42,11 @@ class PlannerHierarchySpec extends AnyFunSpec with Matchers with PlanValidationS
 
   private val rawRetention = 7.days.toMillis
   val rawPlanner = new SingleClusterPlanner(dataset, schemas, mapperRef,
-    earliestRetainedTimestampFn = now - rawRetention, queryConfig, "raw")
+    earliestRetainedTimestampFn = now - rawRetention, queryConfig, ClusterType.raw)
 
   private val downsampleRetention = 30.days.toMillis
   val downsamplePlanner = new SingleClusterPlanner(dataset, schemas, mapperRef,
-    earliestRetainedTimestampFn = now - downsampleRetention, queryConfig, "downsample")
+    earliestRetainedTimestampFn = now - downsampleRetention, queryConfig, ClusterType.downsample)
 
   private def inProcessDispatcher =  InProcessPlanDispatcher(EmptyQueryConfig)
 
@@ -58,7 +58,7 @@ class PlannerHierarchySpec extends AnyFunSpec with Matchers with PlanValidationS
   private val rrRetention = 30.days.toMillis
   val recordingRulesPlanner = new SingleClusterPlanner(dataset, schemas, mapperRef,
     earliestRetainedTimestampFn = now - rrRetention,
-    queryConfig, "recordingRules")
+    queryConfig, ClusterType.recordingRules)
 
   private val plannerSelector = (metricName: String) => {
     if (metricName.contains(":1m")) "recordingRules" else "longTerm"

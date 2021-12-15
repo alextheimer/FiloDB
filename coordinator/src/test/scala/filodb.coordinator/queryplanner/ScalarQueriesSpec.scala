@@ -33,7 +33,7 @@ class ScalarQueriesSpec extends AnyFunSpec with Matchers {
   val queryConfig = new QueryConfig(config.getConfig("filodb.query"))
 
   val engine = new SingleClusterPlanner(dataset, schemas, mapperRef, earliestRetainedTimestampFn = 0,
-    queryConfig, "raw")
+    queryConfig, ClusterType.raw)
 
   val promQlQueryParams = PromQlQueryParams("sum(heap_usage)", 100, 1, 1000)
 
