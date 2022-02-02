@@ -2,11 +2,9 @@ package filodb.core.downsample
 
 import java.util
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
-
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
-
 import com.typesafe.config.Config
 import com.typesafe.scalalogging.StrictLogging
 import kamon.Kamon
@@ -15,10 +13,11 @@ import kamon.tag.TagSet
 import monix.eval.Task
 import monix.execution.{CancelableFuture, Scheduler, UncaughtExceptionReporter}
 import monix.reactive.Observable
-
+import org.jctools.maps.NonBlockingHashMapLong
 import filodb.core.{DatasetRef, Types}
 import filodb.core.binaryrecord2.RecordSchema
 import filodb.core.memstore._
+import filodb.core.memstore.ratelimit.{CardinalityTracker, QuotaSource, RocksDbCardinalityStore}
 import filodb.core.metadata.Schemas
 import filodb.core.query.{ColumnFilter, Filter, QuerySession}
 import filodb.core.store._
@@ -46,6 +45,7 @@ class DownsampledTimeSeriesShardStats(dataset: DatasetRef, shardNum: Int) {
 
 class DownsampledTimeSeriesShard(rawDatasetRef: DatasetRef,
                                  val rawStoreConfig: StoreConfig,
+                                 val quotaSource: QuotaSource,
                                  val schemas: Schemas,
                                  store: ColumnStore, // downsample colStore
                                  rawColStore: ColumnStore,
@@ -72,6 +72,23 @@ class DownsampledTimeSeriesShard(rawDatasetRef: DatasetRef,
   private val stats = new DownsampledTimeSeriesShardStats(rawDatasetRef, shardNum)
 
   private val partKeyIndex = new PartKeyLuceneIndex(indexDataset, schemas.part, shardNum, indexTtlMs)
+
+  // TODO(a_theimer): rename/delete/move/maintain all between here and `cardTracker`
+  private val ref = rawDatasetRef
+  private val storeConfig = rawStoreConfig
+  // TODO(a_theimer): consolidate this with TimeSeriesShard
+  private val cardTracker: CardinalityTracker = if (storeConfig.meteringEnabled) {
+    // FIXME switch this to some local-disk based store when we graduate out of POC mode
+    val cardStore = new RocksDbCardinalityStore(ref, shardNum)
+
+    val defaultQuota = quotaSource.getDefaults(ref)
+    val tracker = new CardinalityTracker(ref, shardNum, schemas.part.options.shardKeyColumns.length,
+      defaultQuota, cardStore)
+    quotaSource.getQuotas(ref).foreach { q =>
+      tracker.setQuota(q.shardKeyPrefix, q.quota)
+    }
+    tracker
+  } else UnsafeUtils.ZeroPointer.asInstanceOf[CardinalityTracker]
 
   private val indexUpdatedHour = new AtomicLong(0)
 
@@ -138,7 +155,8 @@ class DownsampledTimeSeriesShard(rawDatasetRef: DatasetRef,
 
   def recoverIndex(): Future[Unit] = {
     indexBootstrapper
-      .bootstrapIndexDownsample(partKeyIndex, shardNum, indexDataset, indexTtlMs){ _ => createPartitionID() }
+      .bootstrapIndexDownsample(partKeyIndex, shardNum, indexDataset, indexTtlMs)(
+        pk => createPartIdAndTrackCard(pk.partKey))
       .map { count =>
         logger.info(s"Bootstrapped index for dataset=$indexDataset shard=$shardNum with $count records")
       }.map { _ =>
@@ -174,10 +192,28 @@ class DownsampledTimeSeriesShard(rawDatasetRef: DatasetRef,
     }.onErrorRestartUnlimited.completedL.runAsync(housekeepingSched)
   }
 
+  // TODO(a_theimer)
+  private def pidToShardKey(pid: Int): Seq[String] = {
+    val pk = partKeyIndex.partKeyFromPartId(pid).get
+    val unsafePkOffset = PartKeyLuceneIndex.bytesRefToUnsafeOffset(pk.offset)
+    val schema = schemas(RecordSchema.schemaID(pk.bytes, unsafePkOffset))
+    schema.partKeySchema.colValues(pk.bytes, unsafePkOffset,
+      schemas.part.options.shardKeyColumns)
+  }
+
+  // scalastyle:off
   private def purgeExpiredIndexEntries(): Unit = {
     val start = System.currentTimeMillis()
+    val partsToPurge = partKeyIndex.partIdsEndedBefore(System.currentTimeMillis() - downsampleTtls.last.toMillis)
     try {
-      val partsToPurge = partKeyIndex.partIdsEndedBefore(System.currentTimeMillis() - downsampleTtls.last.toMillis)
+      // TODO(a_theimer): confirm no ingestion check exists as in TsShard
+      if (storeConfig.meteringEnabled) {
+        try {
+          partsToPurge.foreach (pid => cardTracker.decrementCount(pidToShardKey(pid)))
+        } catch { case e: Exception =>
+          logger.error("Got exception when reducing cardinality in tracker", e)
+        }
+      }
       partKeyIndex.removePartKeys(partsToPurge)
       logger.info(s"Purged ${partsToPurge.length} entries from downsample " +
         s"index of dataset=$rawDatasetRef shard=$shardNum")
@@ -188,6 +224,31 @@ class DownsampledTimeSeriesShard(rawDatasetRef: DatasetRef,
     } finally {
       stats.purgeIndexEntriesLatency.record(System.currentTimeMillis() - start)
     }
+
+    // TODO(a_theimer): copy-pasted-- don't need this?
+//    partIter.skippedPartIDs.foreach { pId =>
+//      partKeyIndex.partKeyFromPartId(pId).foreach { pk =>
+//        val unsafePkOffset = PartKeyLuceneIndex.bytesRefToUnsafeOffset(pk.offset)
+//        val schema = schemas(RecordSchema.schemaID(pk.bytes, unsafePkOffset))
+//        val shardKey = schema.partKeySchema.colValues(pk.bytes, unsafePkOffset,
+//          schemas.part.options.shardKeyColumns)
+//        if (storeConfig.meteringEnabled) {
+//          try {
+//            cardTracker.decrementCount(shardKey)
+//          } catch { case e: Exception =>
+//            logger.error("Got exception when reducing cardinality in tracker", e)
+//          }
+//        }
+//      }
+//    }
+//    partKeyIndex.removePartKeys(partIter.skippedPartIDs)
+//    partKeyIndex.removePartKeys(removedParts)
+//    if (removedParts.length + partIter.skippedPartIDs.length > 0)
+//      logger.info(s"Purged ${removedParts.length} partitions from memory/index " +
+//        s"and ${partIter.skippedPartIDs.length} from index only from dataset=$ref shard=$shardNum")
+//    shardStats.purgedPartitions.increment(removedParts.length)
+//    shardStats.purgedPartitionsFromIndex.increment(removedParts.length + partIter.skippedPartIDs.length)
+//    shardStats.purgePartitionTimeMs.increment(System.currentTimeMillis() - start)
   }
 
   private def indexRefresh(): Task[Unit] = {
@@ -223,8 +284,25 @@ class DownsampledTimeSeriesShard(rawDatasetRef: DatasetRef,
     stats.indexRamBytes.update(partKeyIndex.indexRamBytes)
   }
 
+  private def createPartIdAndTrackCard(pk: Array[Byte]): Int = {
+    val schemaId = RecordSchema.schemaID(pk, UnsafeUtils.arayOffset)
+    val schema = schemas(schemaId)
+    if (schema != Schemas.UnknownSchema) {
+      if (storeConfig.meteringEnabled) {
+        val shardKey = schema.partKeySchema.colValues(
+               pk, UnsafeUtils.arayOffset,schema.options.shardKeyColumns)
+        cardTracker.modifyCount(shardKey, 1, 0)
+      }
+    }
+    createPartitionID()
+  }
+
   private def lookupOrCreatePartId(pk: Array[Byte]): Int = {
-    partKeyIndex.partIdFromPartKeySlow(pk, UnsafeUtils.arayOffset).getOrElse(createPartitionID())
+    val pidOpt = partKeyIndex.partIdFromPartKeySlow(pk, UnsafeUtils.arayOffset)
+    if (pidOpt.nonEmpty) {
+      return pidOpt.get
+    }
+    createPartIdAndTrackCard(pk)
   }
 
   /**
@@ -280,6 +358,9 @@ class DownsampledTimeSeriesShard(rawDatasetRef: DatasetRef,
 
   def shutdown(): Unit = {
     try {
+      if (storeConfig.meteringEnabled) {
+        cardTracker.close()
+      }
       partKeyIndex.closeIndex();
       houseKeepingFuture.cancel();
       gaugeUpdateFuture.cancel();

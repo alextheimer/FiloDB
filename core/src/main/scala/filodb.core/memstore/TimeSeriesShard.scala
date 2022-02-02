@@ -1219,6 +1219,7 @@ class TimeSeriesShard(val ref: DatasetRef,
         val shardKey = p.schema.partKeySchema.colValues(p.partKeyBase, p.partKeyOffset,
                                                         p.schema.options.shardKeyColumns)
         if (storeConfig.meteringEnabled) {
+          // TODO(a_theimer): unaccounted for in DSTS
           cardTracker.modifyCount(shardKey, 0, -1)
         }
       }
@@ -1326,6 +1327,7 @@ class TimeSeriesShard(val ref: DatasetRef,
         // causes endTime to be set to Long.MaxValue
         partKeyIndex.addPartKey(newPart.partKeyBytes, partId, startTime)()
         if (storeConfig.meteringEnabled) {
+          // TODO(a_theimer): unaccounted for in DSTS
           cardTracker.modifyCount(shardKey, 1, 1)
         }
       } else {
@@ -1388,6 +1390,7 @@ class TimeSeriesShard(val ref: DatasetRef,
               val shardKey = tsp.schema.partKeySchema.colValues(tsp.partKeyBase, tsp.partKeyOffset,
                 tsp.schema.options.shardKeyColumns)
               if (storeConfig.meteringEnabled) {
+                // TODO(a_theimer): unaccounted for in DSTS
                 cardTracker.modifyCount(shardKey, 0, 1)
               }
             }
