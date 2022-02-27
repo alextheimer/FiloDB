@@ -25,8 +25,6 @@ object Dependencies {
   val sttpVersion       = "1.3.3"
 
   /* Dependencies shared */
-  val logbackDep        = "ch.qos.logback"             % "logback-classic"       % "1.2.3"
-  val log4jDep          = "log4j"                      % "log4j"                 % "1.2.17"
   val scalaLoggingDep   = "com.typesafe.scala-logging" %% "scala-logging"        % "3.7.2"
   val scalaTest         = "org.scalatest"              %% "scalatest"            % "3.1.2"
   val scalaCheck        = "org.scalacheck"             %% "scalacheck"           % "1.14.3"
@@ -39,7 +37,8 @@ object Dependencies {
 
   lazy val commonDeps = Seq(
     "io.kamon" %% "kamon-bundle" % kamonBundleVersion,
-    logbackDep % Test,
+    "org.slf4j"                    % "slf4j-api"          % "1.7.10",
+    "org.apache.logging.log4j" % "log4j-slf4j-impl" % "2.14.0",
     scalaTest  % Test,
     "com.softwaremill.quicklens" %% "quicklens" % "1.4.12" % Test,
     "org.apache.xbean" % "xbean-asm6-shaded" % "4.10" % Test,
@@ -62,7 +61,7 @@ object Dependencies {
     scalaLoggingDep,
     "io.kamon"                     %% "kamon-zipkin"      % kamonBundleVersion,
     "io.kamon"                     %% "kamon-opentelemetry" % kamonBundleVersion,
-    "org.slf4j"                    % "slf4j-api"          % "1.7.10",
+
     "com.beachape"                 %% "enumeratum"        % "1.5.10",
     "io.monix"                     %% "monix"             % "3.4.0",
     "com.googlecode.concurrentlinkedhashmap"              % "concurrentlinkedhashmap-lru" % "1.4",
@@ -90,7 +89,6 @@ object Dependencies {
     // other dependencies separated by commas
     "org.lz4"                %  "lz4-java"             % "1.4",
     "com.datastax.cassandra" % "cassandra-driver-core" % cassDriverVersion,
-    logbackDep % Test
   )
 
   lazy val queryDeps = commonDeps ++ Seq(
@@ -119,7 +117,6 @@ object Dependencies {
   )
 
   lazy val cliDeps = Seq(
-    logbackDep,
     "io.kamon"          %% "kamon-bundle"        % kamonBundleVersion,
     "org.rogach"        %% "scallop"             % "3.1.1"
   )
@@ -128,8 +125,8 @@ object Dependencies {
     "io.monix"          %% "monix-kafka-1x" % monixKafkaVersion,
     "org.apache.kafka"  % "kafka-clients"   % "1.0.0"     % "compile,test" exclude("org.slf4j", "slf4j-log4j12"),
     "com.typesafe.akka" %% "akka-testkit"   % akkaVersion % "test,it",
-    scalaTest  % "test,it",
-    logbackDep % "test,it")
+    scalaTest  % "test,it"
+  )
 
   lazy val promDeps = Seq(
     "com.google.protobuf"    % "protobuf-java"             % "2.5.0",
@@ -139,13 +136,11 @@ object Dependencies {
   )
 
   lazy val gatewayDeps = commonDeps ++ Seq(
-    logbackDep,
     "io.monix"   %% "monix-kafka-1x" % monixKafkaVersion,
     "org.rogach" %% "scallop"        % "3.1.1"
   )
 
   lazy val httpDeps = Seq(
-    logbackDep,
     akkaHttp,
     akkaHttpCirce,
     circeGeneric,
@@ -155,7 +150,6 @@ object Dependencies {
   )
 
   lazy val standaloneDeps = Seq(
-    logbackDep,
     "io.kamon"              %% "kamon-zipkin"            % kamonBundleVersion,
     "com.iheart"            %% "ficus"                   % ficusVersion      % Test,
     "com.typesafe.akka"     %% "akka-multi-node-testkit" % akkaVersion       % Test,
@@ -166,7 +160,6 @@ object Dependencies {
   )
 
   lazy val bootstrapperDeps = Seq(
-    logbackDep,
     scalaLoggingDep,
     "com.typesafe.akka"            %% "akka-cluster"            % akkaVersion,
     // akka http should be a compile time dependency only. Users of this library may want to use a different http server
@@ -191,7 +184,7 @@ object Dependencies {
   //  )
 
   lazy val jmhDeps = Seq(
-    "org.apache.spark" %% "spark-sql" % sparkVersion excludeAll(excludeSlf4jLog4j, excludeZK, excludeJersey)
+    "org.apache.spark" %% "spark-sql" % sparkVersion excludeAll(/*excludeSlf4jLog4j,*/ excludeZK, excludeJersey)
   )
 
   //  lazy val stressDeps = Seq(

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Logging config for server deploys, with automatic date based log rollover -->
+
+<Configuration>
+    <!-- Enable JMX-based changing of log levels, reloading of config, etc. -->
+    <JmxConfigurator />
+
+<!--   <logger name="filodb.coordinator" level="TRACE" />
+  <logger name="filodb.core" level="TRACE" />
+ -->
+    <Appenders>
+        <RollingFile name="file" fileName="${LOG_DIR}/filo-cli.log" filePattern="${LOG_DIR}/filo-cli.%d{yyyy-MM-dd}.log">
+            <Policies>
+                <!-- keep 30 days' worth of history -->
+                <TimeBasedTriggeringPolicy interval="30"/>
+            </Policies>
+            <PatternLayout pattern="[%date{ISO8601}] %-5level %logger{20} [%thread] - %msg%n" />
+        </RollingFile>
+    </Appenders>
+    <Loggers>
+        <Root level="info">
+            <Appender-Ref ref="file"/>
+        </Root>
+    </Loggers>
+</Configuration>

@@ -438,6 +438,7 @@ class SingleClusterPlanner(val dataset: Dataset,
       MultiSchemaPartitionsExec(qContext, dispatcher, dsRef, shard, renamedFilters,
         toChunkScanMethod(rangeSelectorWithOffset), dsOptions.metricColumn, schemaOpt, colName)
     }
+    logger.info("AHHHHH")
     PlanResult(execPlans, needsStitch)
   }
 

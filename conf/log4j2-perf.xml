@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration>
+    <JmxConfigurator />
+    <Appenders>
+        <Console name="STDOUT">
+            <PatternLayout pattern="[%date{ISO8601}] %-5level %thread %logger{26} [%X{akkaSource}] - %msg%n" />
+        </Console>
+    </Appenders>
+    <Loggers>
+        <Logger name="filodb.coordinator.KamonMetricsLogReporter" level="off" />
+        <Logger name="filodb.coordinator.KamonSpanLogReporter" level="off" />
+        <Logger name="filodb.core.memstore.LuceneMetricsRouter" level="off" />
+        <Logger name="org.apache.kafka.clients.producer.ProducerConfig" level="WARN"/>
+        <Logger name="org.apache.kafka.common.security" level="WARN"/>
+        <Logger name="org.apache.kafka.common.network" level="WARN"/>
+        <Logger name="org.apache.kafka.common.metrics" level="ERROR"/>
+        <Root level="INFO">
+            <Appender-Ref ref="STDOUT"/>
+        </Root>
+    </Loggers>
+</Configuration>

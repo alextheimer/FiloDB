@@ -1,0 +1,23 @@
+<Configuration>
+  <Appenders>
+    <Console name="STDOUT">
+      <PatternLayout pattern="[%date{ISO8601}] %-5level %logger{26} [%X{akkaSource}] - %msg%n" />
+    </Console>
+    <File name="FILE" fileName="logs/multijvm-${multijvm.node}-test.log" append="false">
+      <PatternLayout pattern="[%date{ISO8601}] %-5level %logger{26} [%X{akkaSource}] - %msg%n" />
+    </File>
+  </Appenders>
+  <Loggers>
+    <!-- NOTE: additivity=false means filodb debug logs will not go to STDOUT -->
+    <Logger name="filodb" level="DEBUG" additivity="false">
+      <appender-ref ref="FILE" />
+    </Logger>
+    <Logger name="akka" level="INFO" additivity="false">
+      <appender-ref ref="FILE" />
+    </Logger>
+    <Root level="WARN">
+      <Appender-Ref ref="FILE" />
+      <Appender-Ref ref="STDOUT" />
+    </Root>
+  </Loggers>
+</Configuration>

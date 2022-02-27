@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Logging config for server deploys, with automatic date based log rollover -->
+
+<Configuration>
+    <!-- Enable JMX-based changing of log levels, reloading of config, etc. -->
+    <JmxConfigurator />
+
+<!--   <logger name="filodb.coordinator" level="TRACE" />
+  <logger name="filodb.core" level="TRACE" />
+ -->
+    <Appenders>
+        <RollingFile name="file" fileName="${LOG_DIR:-logs}/filodb-server-${logSuffix:-1}.log" filePattern="${LOG_DIR}/filodb-server-${logSuffix:-1}.%d{yyyy-MM-dd}.log">
+            <Policies>
+                <!-- keep 30 days' worth of history -->
+                <TimeBasedTriggeringPolicy interval="30"/>
+            </Policies>
+            <PatternLayout pattern="[%date{ISO8601}] %-5level %logger{20} [%thread] - %msg%n" />
+        </RollingFile>
+    </Appenders>
+    <Loggers>
+        <!-- NOTE: enable this to trace or debug Kryo/MinLog serialization messages  -->
+        <!-- <logger name="com.esotericsoftware.minlog" level="TRACE"/> -->
+        <Logger name="org.apache.kafka.clients.consumer.ConsumerConfig" level="INFO"/>
+        <Logger name="org.apache.kafka.clients" level="INFO"/>
+        <Logger name="org.apache.kafka" level="INFO"/>
+        <Logger name="org.apache.kafka.clients.producer.ProducerConfig" level="WARN"/>
+        <Logger name="org.apache.kafka.common.security" level="WARN"/>
+        <Logger name="org.apache.kafka.common.network" level="WARN"/>
+        <Logger name="org.apache.kafka.common.metrics" level="ERROR"/>
+        <Root level="info">
+            <Appender-Ref ref="file"/>
+        </Root>
+    </Loggers>
+</Configuration>

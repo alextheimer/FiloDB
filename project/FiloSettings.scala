@@ -1,13 +1,14 @@
 import sbt._
 import Keys._
 import sbt.librarymanagement.ScalaModuleInfo
-
 import com.typesafe.sbt.SbtMultiJvm
 import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 import sbt.Tests.Output._
 import org.scalastyle.sbt.ScalastylePlugin.autoImport._
 import pl.project13.scala.sbt.JmhPlugin
+import sbtassembly.AssemblyKeys.assemblyMergeStrategy
 import sbtassembly.AssemblyPlugin.autoImport._
+import sbtassembly.PathList
 
 /* Settings */
 object FiloSettings {
@@ -251,7 +252,15 @@ object FiloSettings {
   )
 
   lazy val commonSettings =
-      disciplineSettings ++
+  disciplineSettings ++
       moduleSettings ++
-      testSettings
+      testSettings ++
+    Seq(
+    assemblyMergeStrategy in assembly := {
+      case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+      case PathList("NOTICE", xs @ _*) => MergeStrategy.discard
+      case PathList("LICENSE", xs @ _*) => MergeStrategy.discard
+      case x => MergeStrategy.deduplicate
+    }
+    )
 }

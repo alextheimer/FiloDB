@@ -4,6 +4,9 @@ import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 import pl.project13.scala.sbt.JmhPlugin
 import sbt._
 import sbt.Keys._
+import sbtassembly.AssemblyKeys.{assembly, assemblyMergeStrategy}
+import sbtassembly.AssemblyPlugin.autoImport.MergeStrategy
+import sbtassembly.PathList
 
 // All of the submodules are defined here.
 // This works around an issue where things in multiple build.sbt files cannot reference one another.
@@ -60,7 +63,12 @@ object Submodules {
     .dependsOn(core % "compile->compile; test->test")
     .settings(
       libraryDependencies ++= queryDeps,
-      commonSettings,
+      commonSettings ++ Seq(
+        assemblyMergeStrategy in assembly := {
+          case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+          case x => MergeStrategy.first
+        }
+      ),
       scalacOptions += "-language:postfixOps",
       name := "filodb-query"
     )
