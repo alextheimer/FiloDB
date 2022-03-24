@@ -1,13 +1,12 @@
 package filodb.coordinator.queryplanner
 
 import scala.concurrent.duration._
-
 import akka.actor.ActorRef
 import com.typesafe.scalalogging.StrictLogging
 import kamon.Kamon
-
 import filodb.coordinator.ShardMapper
 import filodb.coordinator.client.QueryCommands.StaticSpreadProvider
+import filodb.coordinator.queryplanner.optimize.CommonDispatcherOpt
 import filodb.core.{SpreadProvider, StaticTargetSchemaProvider, TargetSchemaChange, TargetSchemaProvider}
 import filodb.core.binaryrecord2.RecordBuilder
 import filodb.core.metadata.{Dataset, DatasetOptions, Schemas}
@@ -472,7 +471,7 @@ class SingleClusterPlanner(val dataset: Dataset,
           rvRangeFromPlan(lp))
       }
     }
-    PlanResult(execPlans)
+    PlanResult(execPlans.map(CommonDispatcherOpt.optimize(_)))
   }
 
   override def materializeBinaryJoin(qContext: QueryContext,
