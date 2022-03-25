@@ -69,7 +69,7 @@ object CommonDispatcherOpt {
       case plan: SetOperatorExec => optimizeSetOperatorExec(plan)
       case plan: NonLeafExecPlan => optimizeNonLeaf(plan)
       case plan: MultiSchemaPartitionsExec => optimizeMultiSchemaPartitionsExec(plan)
-      case _ => throw new IllegalArgumentException("TODO")
+      case plan => Result(plan, None)
     }
   }
 
