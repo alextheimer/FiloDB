@@ -46,7 +46,7 @@ import scala.collection.mutable
  *
  * Now, data is joined locally and in smaller batches.
  */
-object BinaryJoinPushdownOpt {
+class BinaryJoinPushdownOpt {
 
   private case class Subtree(root: ExecPlan,
                              targetSchemaColsOpt: Option[Set[String]]) {}

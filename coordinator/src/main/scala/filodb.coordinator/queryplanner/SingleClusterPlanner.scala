@@ -166,8 +166,8 @@ class SingleClusterPlanner(val dataset: Dataset,
       }
 
       var matFinal = materialized
-      matFinal = BinaryJoinPushdownOpt.optimize(matFinal)
-      matFinal = CommonDispatcherOpt.optimize(matFinal, queryConfig)
+      matFinal = new BinaryJoinPushdownOpt().optimize(matFinal)
+      matFinal = new CommonDispatcherOpt(queryConfig).optimize(matFinal)
       logger.debug(s"Materialized logical plan for dataset=$dsRef :" +
         s" $logicalPlan to \n${matFinal.printTree()}")
       matFinal
