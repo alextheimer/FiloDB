@@ -1,6 +1,8 @@
 package filodb.coordinator.queryplanner.optimize
 
 import filodb.coordinator.queryplanner.SingleClusterPlanner.findTargetSchema
+import filodb.core.DatasetRef
+import filodb.core.query.QueryContext
 import filodb.query.exec.{BinaryJoinExec, DistConcatExec, EmptyResultExec, ExecPlan, LocalPartitionDistConcatExec, MultiSchemaPartitionsExec, ReduceAggregateExec, SetOperatorExec}
 
 import scala.collection.mutable
@@ -49,9 +51,10 @@ object BinaryJoinPushdownOpt {
   private case class Subtree(root: ExecPlan,
                              targetSchemaColsOpt: Option[Set[String]]) {}
 
-  private case class Result(plans: Seq[Subtree],
+  private case class Result(subtrees: Seq[Subtree],
                             shardToSubtrees: Map[Int, Seq[Subtree]]) {}
 
+  // TODO(a_theimer): use or delete
 //  /**
 //   * Given a BinaryJoin, returns true iff it would be valid to apply the "pushdown" optimization.
 //   * See materializeBinaryJoinWithPushdown for more details about the optimization.
@@ -61,33 +64,11 @@ object BinaryJoinPushdownOpt {
 //   *   (2) when the eventual ExecPlan is executed, each child join-key must
 //   *       constitute a superset of the target-schema columns.
 //   */
-//  private def canPushdownBinaryJoin(binJoin: BinaryJoinExec): Boolean = {
-//    val targetSchemaProviderOpt = binJoin.queryContext.plannerParams.targetSchemaProvider
-//    if (targetSchemaProviderOpt.isEmpty) {
-//      return false
-//    }
-//    Seq(binJoin.lhs, binJoin.rhs).forall { case child =>
-//      val targetSchemaOpt = {
-//        val filters = getRawSeriesFilters(child)
-//        if (filters.size != 1) {
-//          logger.warn(s"expected a single set of column filters, but found $filters " +
-//            s"from child $child")
-//          return false
-//        }
-//        val targetSchemaChanges = targetSchemaProviderOpt.get.targetSchemaFunc(filters.head)
-//        findTargetSchema(targetSchemaChanges, child.startMs, child.endMs)
-//      }
-//      if (targetSchemaOpt.isEmpty) {
-//        return false
-//      }
-//      joinKeyIsTargetSchemaSuperset(binJoin, targetSchemaOpt.get.schema)
-//    }
-//  }
 
   private def optimizeChildren(plans: Seq[ExecPlan]): Result = {
     val results = plans.map(optimizeWalker(_))
-    val optimizedChildren = results.map(_.plans).flatten
-    val updatedMap = results.map(_.shardToSubtrees).foldLeft(
+    val optimizedPlans = results.map(_.subtrees).flatten
+    val shardToSubtrees = results.map(_.shardToSubtrees).foldLeft(
       new mutable.HashMap[Int, Seq[Subtree]]()){ case (acc, map) =>
       map.foreach{ case (k, v) =>
         val exist = acc.getOrElse(k, Nil)
@@ -95,221 +76,122 @@ object BinaryJoinPushdownOpt {
       }
       acc
     }
-    Result(optimizedChildren, updatedMap.toMap)
+    Result(optimizedPlans, shardToSubtrees.toMap)
   }
 
   private def optimizeAggregate(plan: ReduceAggregateExec): Result = {
     // for now: just end the optimization here
-    val childrenRes = optimizeChildren(plan.children)
-    val updated = plan.withChildren(childrenRes.plans.map(_.root))
-    Result(Seq(Subtree(updated, None)), Map())
+    val childPlans = optimizeChildren(plan.children).subtrees.map(_.root)
+    val subtree = Subtree(plan.withChildren(childPlans), None)
+    Result(Seq(subtree), Map())
   }
 
   private def optimizeConcat(plan: DistConcatExec): Result = {
     // for now: just end the optimization here
-    val childrenRes = optimizeChildren(plan.children)
-    val updated = plan.withChildren(childrenRes.plans.map(_.root))
-    Result(Seq(Subtree(updated, None)), Map())
+    val childPlans = optimizeChildren(plan.children).subtrees.map(_.root)
+    val subtree = Subtree(plan.withChildren(childPlans), None)
+    Result(Seq(subtree), Map())
   }
 
-  private def makePushdownsSet(exec: SetOperatorExec, lhsRes: Result, rhsRes: Result): Result = {
+  private def makePushdownJoins(lhsRes: Result,
+                                rhsRes: Result,
+                                queryContext: QueryContext,
+                                dataset: DatasetRef,
+                                makeJoinPlan: (Seq[ExecPlan], Seq[ExecPlan]) => ExecPlan): Result = {
 
-    // map each rhs plan to its same-shard lhs counterpart (s)
-    val joinPairs = lhsRes.shardToSubtrees.filter{ case (shard, subtrees) => rhsRes.shardToSubtrees.contains(shard) }
-      .flatMap { case (shard, lhsSubtrees) =>
-        val rhsSubtrees = rhsRes.shardToSubtrees(shard)
-        val pairs = new mutable.ArrayBuffer[(Int, (Subtree, Subtree))]
-        for (lhsTree <- lhsSubtrees) {
-          for (rhsTree <- rhsSubtrees) {
-            pairs.append((shard, (lhsTree, rhsTree)))
-          }
+    // TODO(a_theimer): make this less confusing
+    val joinPairs = lhsRes.shardToSubtrees.filter{ case (shard, _) =>
+      // select only the single-shard subtrees that exist in both maps
+      rhsRes.shardToSubtrees.contains(shard)
+    }.flatMap { case (shard, lhsSubtrees) =>
+      // make all possible combinations of subtrees (1) on the same shard, and (2) on separate lhs/rhs sides
+      val rhsSubtrees = rhsRes.shardToSubtrees(shard)
+      val pairs = new mutable.ArrayBuffer[(Int, (Subtree, Subtree))]
+      for (lhsTree <- lhsSubtrees) {
+        for (rhsTree <- rhsSubtrees) {
+          pairs.append((shard, (lhsTree, rhsTree)))
         }
-        pairs
       }
+      pairs
+    }
 
     if (joinPairs.isEmpty) {
-      return Result(Seq(Subtree(EmptyResultExec(exec.queryContext, exec.dataset), None)), Map())
+      return Result(Seq(Subtree(EmptyResultExec(queryContext, dataset), None)), Map())
     }
 
-    // build the pushed-down join subtrees
-    val newMap = new mutable.HashMap[Int, Seq[Subtree]]
-    val res = joinPairs.map{ case (shard, (lhsSt, rhsSt)) =>
-      val subres = exec.copy(lhs = Seq(lhsSt.root), rhs = Seq(rhsSt.root))
-      exec.copyStateInto(subres)
-      newMap(shard) = Seq(Subtree(subres, Some(lhsSt.targetSchemaColsOpt.get.union(rhsSt.targetSchemaColsOpt.get))))
-      Subtree(subres, Some(lhsSt.targetSchemaColsOpt.get.union(rhsSt.targetSchemaColsOpt.get)))
-    }
-    Result(res.toSeq, newMap.toMap)
-
-
-    //    val execPlans = if (lp.operator.isInstanceOf[SetOperator]) {
-    //      joinPairs.map{ case (lhs, rhs) =>
-    //        exec.SetOperatorExec(qContext, lhs.dispatcher,
-    //          Seq(lhs.withDispatcher(inProcessPlanDispatcher)),
-    //          Seq(rhs.withDispatcher(inProcessPlanDispatcher)), lp.operator,
-    //          LogicalPlanUtils.renameLabels(lp.on, dsOptions.metricColumn),
-    //          LogicalPlanUtils.renameLabels(lp.ignoring, dsOptions.metricColumn), dsOptions.metricColumn,
-    //          rvRangeFromPlan(lp))
-    //      }
-    //    } else {
-    //
-    //    }
+    // make the pushed-down join subtrees
+    val shardToSubtrees = new mutable.HashMap[Int, Seq[Subtree]]
+    val pushdownSubtrees = joinPairs.map{ case (shard, (lhsSubtree, rhsSubtree)) =>
+      val pushdownJoinPlan = makeJoinPlan(Seq(lhsSubtree.root), Seq(rhsSubtree.root))
+      val targetSchemaColUnion = lhsSubtree.targetSchemaColsOpt.get.union(rhsSubtree.targetSchemaColsOpt.get)
+      val pushdownJoinSubtree = Subtree(pushdownJoinPlan, Some(targetSchemaColUnion))
+      shardToSubtrees(shard) = Seq(pushdownJoinSubtree)
+      pushdownJoinSubtree
+    }.toSeq
+    Result(pushdownSubtrees, shardToSubtrees.toMap)
   }
 
-  private def makePushdownsBin(exec: BinaryJoinExec, lhsRes: Result, rhsRes: Result): Result = {
-
-    // map each rhs plan to its same-shard lhs counterpart (s)
-    val joinPairs = lhsRes.shardToSubtrees.filter{ case (shard, subtrees) => rhsRes.shardToSubtrees.contains(shard) }
-      .flatMap { case (shard, lhsSubtrees) =>
-        val rhsSubtrees = rhsRes.shardToSubtrees(shard)
-        val pairs = new mutable.ArrayBuffer[(Int, (Subtree, Subtree))]
-        for (lhsTree <- lhsSubtrees) {
-          for (rhsTree <- rhsSubtrees) {
-            pairs.append((shard, (lhsTree, rhsTree)))
-          }
+  private def optimizeJoinPlan(lhsRes: Result,
+                               rhsRes: Result,
+                               on: Seq[String],
+                               ignoring: Seq[String],
+                               queryContext: QueryContext,
+                               dataset: DatasetRef,
+                               makeJoinPlan: (Seq[ExecPlan], Seq[ExecPlan]) => ExecPlan): Result = {
+    val childSubtrees = Seq(lhsRes, rhsRes).flatMap(_.subtrees)
+    // make sure all child subtrees have all leaf-level target schema columns defined and present
+    if (childSubtrees.forall(_.targetSchemaColsOpt.isDefined)) {
+      // get union of all target schema columns
+      val targetSchemaColsUnion = childSubtrees.map(_.targetSchemaColsOpt.get)
+        .foldLeft(Set[String]()){ case (acc, nextCols) =>
+          acc.union(nextCols)
         }
-        pairs
+      // make sure all cols present in join keys (TODO(a_theimer): relax this?)
+      // TODO(a_theimer): this is not technically correct; combines on-empty and both-empty cases
+      val alltargetSchemaColsPresent = if (on.isEmpty) {
+        // make sure no target schema strings are ignored
+        ignoring.find(targetSchemaColsUnion.contains(_)).isEmpty
+      } else {
+        // make sure all target schema cols are included in on
+        targetSchemaColsUnion.forall(on.toSet.contains(_))
       }
-
-    if (joinPairs.isEmpty) {
-      return Result(Seq(Subtree(EmptyResultExec(exec.queryContext, exec.dataset), None)), Map())
+      if (alltargetSchemaColsPresent) {
+        return makePushdownJoins(lhsRes, rhsRes, queryContext, dataset, makeJoinPlan)
+      }
     }
-
-    // build the pushed-down join subtrees
-    val newMap = new mutable.HashMap[Int, Seq[Subtree]]
-    val res = joinPairs.map{ case (shard, (lhsSt, rhsSt)) =>
-      val subres = exec.copy(lhs = Seq(lhsSt.root), rhs = Seq(rhsSt.root))
-      exec.copyStateInto(subres)
-      newMap(shard) = Seq(Subtree(subres, Some(lhsSt.targetSchemaColsOpt.get.union(rhsSt.targetSchemaColsOpt.get))))
-      Subtree(subres, Some(lhsSt.targetSchemaColsOpt.get.union(rhsSt.targetSchemaColsOpt.get)))
-    }
-    Result(res.toSeq, newMap.toMap)
-
-
-//    val execPlans = if (lp.operator.isInstanceOf[SetOperator]) {
-//      joinPairs.map{ case (lhs, rhs) =>
-//        exec.SetOperatorExec(qContext, lhs.dispatcher,
-//          Seq(lhs.withDispatcher(inProcessPlanDispatcher)),
-//          Seq(rhs.withDispatcher(inProcessPlanDispatcher)), lp.operator,
-//          LogicalPlanUtils.renameLabels(lp.on, dsOptions.metricColumn),
-//          LogicalPlanUtils.renameLabels(lp.ignoring, dsOptions.metricColumn), dsOptions.metricColumn,
-//          rvRangeFromPlan(lp))
-//      }
-//    } else {
-//
-//    }
+    // no pushdown and end optimization here
+    val root = makeJoinPlan(lhsRes.subtrees.map(_.root), rhsRes.subtrees.map(_.root))
+    Result(Seq(Subtree(root, None)), Map())
   }
 
   private def optimizeSetOp(plan: SetOperatorExec): Result = {
     val lhsRes = optimizeChildren(plan.lhs)
     val rhsRes = optimizeChildren(plan.rhs)
-
-    val targetSchemaColsPreserved = Seq(lhsRes, rhsRes).flatMap(_.plans).forall(_.targetSchemaColsOpt.isDefined)
-    if (targetSchemaColsPreserved) {
-      // get union of all target schema cols
-      val targetSchemaColsUnion = Seq(lhsRes, rhsRes).flatMap(_.plans).map(_.targetSchemaColsOpt.get)
-        .foldLeft(Set[String]()){ case (acc, next) =>
-          acc.union(next)
-        }
-      // make sure all cols present in join keys (TODO(a_theimer): relax)
-      // TODO(a_theimer): this is not technically correct; combines on-empty and both-empty cases
-      val allPresent = if (plan.on.isEmpty) {
-        // make sure no target schema strings are ignored
-        plan.ignoring.find(targetSchemaColsUnion.contains(_)).isEmpty
-      } else {
-        // make sure all target schema cols are included in on
-        targetSchemaColsUnion.forall(plan.on.toSet.contains(_))
-      }
-      if (allPresent) {
-        // do the pushdown
-        return makePushdownsSet(plan, lhsRes, rhsRes)
-      }
-    }
-    // no pushdown and kill optimization here
-    val root = plan.copy(lhs = lhsRes.plans.map(_.root),
-      rhs = rhsRes.plans.map(_.root))
-    plan.copyStateInto(root)
-    Result(Seq(Subtree(root, None)), Map())
+    optimizeJoinPlan(lhsRes, rhsRes, plan.on, plan.ignoring, plan.queryContext, plan.dataset,
+      (left: Seq[ExecPlan], right: Seq[ExecPlan]) => {
+        val res = plan.copy(lhs = left, rhs = right)
+        plan.copyStateInto(res)
+        res
+      })
   }
 
   private def optimizeBinaryJoin(plan: BinaryJoinExec): Result = {
     val lhsRes = optimizeChildren(plan.lhs)
     val rhsRes = optimizeChildren(plan.rhs)
-
-    val targetSchemaColsPreserved = Seq(lhsRes, rhsRes).flatMap(_.plans).forall(_.targetSchemaColsOpt.isDefined)
-    if (targetSchemaColsPreserved) {
-      // get union of all target schema cols
-      val targetSchemaColsUnion = Seq(lhsRes, rhsRes).flatMap(_.plans).map(_.targetSchemaColsOpt.get)
-        .foldLeft(Set[String]()){ case (acc, next) =>
-        acc.union(next)
-      }
-      // make sure all cols present in join keys (TODO(a_theimer): relax)
-      // TODO(a_theimer): this is not technically correct; combines on-empty and both-empty cases
-      val allPresent = if (plan.on.isEmpty) {
-        // make sure no target schema strings are ignored
-        plan.ignoring.find(targetSchemaColsUnion.contains(_)).isEmpty
-      } else {
-        // make sure all target schema cols are included in on
-        targetSchemaColsUnion.forall(plan.on.toSet.contains(_))
-      }
-      if (allPresent) {
-        // do the pushdown
-        return makePushdownsBin(plan, lhsRes, rhsRes)
-      }
-    }
-    // no pushdown and kill optimization here
-    val root = plan.copy(lhs = lhsRes.plans.map(_.root),
-                         rhs = rhsRes.plans.map(_.root))
-    plan.copyStateInto(root)
-    Result(Seq(Subtree(root, None)), Map())
+    optimizeJoinPlan(lhsRes, rhsRes, plan.on, plan.ignoring, plan.queryContext, plan.dataset,
+      (left: Seq[ExecPlan], right: Seq[ExecPlan]) => {
+        val res = plan.copy(lhs = left, rhs = right)
+        plan.copyStateInto(res)
+        res
+      })
   }
-
-//  private def optimizeBinaryJoin(plan: BinaryJoinExec): Result = {
-//    // for the lhs, map shards to plans
-//    val lhsShardToPlanMap = lhs.plans.map{ p =>
-//      val mspe = p.asInstanceOf[MultiSchemaPartitionsExec]
-//      mspe.shard -> mspe
-//    }.toMap
-//
-//    // map each rhs plan to its same-shard lhs counterpart
-//    val joinPairs = rhs.plans
-//      .map(_.asInstanceOf[MultiSchemaPartitionsExec])
-//      .filter(r => lhsShardToPlanMap.contains(r.shard))
-//      .map(r => (lhsShardToPlanMap.apply(r.shard), r))
-//
-//    if (joinPairs.isEmpty) {
-//      return PlanResult(Seq(EmptyResultExec(qContext, dataset.ref)))
-//    }
-//
-//    // build the pushed-down join subtrees, where each child plan will be executed in-process.
-//    val execPlans = if (lp.operator.isInstanceOf[SetOperator]) {
-//      joinPairs.map{ case (lhs, rhs) =>
-//        exec.SetOperatorExec(qContext, lhs.dispatcher,
-//          Seq(lhs.withDispatcher(inProcessPlanDispatcher)),
-//          Seq(rhs.withDispatcher(inProcessPlanDispatcher)), lp.operator,
-//          LogicalPlanUtils.renameLabels(lp.on, dsOptions.metricColumn),
-//          LogicalPlanUtils.renameLabels(lp.ignoring, dsOptions.metricColumn), dsOptions.metricColumn,
-//          rvRangeFromPlan(lp))
-//      }
-//    } else {
-//      joinPairs.map{ case (lhs, rhs) =>
-//        BinaryJoinExec(qContext, lhs.dispatcher,
-//          Seq(lhs.withDispatcher(inProcessPlanDispatcher)),
-//          Seq(rhs.withDispatcher(inProcessPlanDispatcher)), lp.operator, lp.cardinality,
-//          LogicalPlanUtils.renameLabels(lp.on, dsOptions.metricColumn),
-//          LogicalPlanUtils.renameLabels(lp.ignoring, dsOptions.metricColumn),
-//          LogicalPlanUtils.renameLabels(lp.include, dsOptions.metricColumn), dsOptions.metricColumn,
-//          rvRangeFromPlan(lp))
-//      }
-//    }
-//  }
 
   private def optimizeMultiSchemaPartitionsExec(plan: MultiSchemaPartitionsExec): Result = {
     val targetSchemaColsOpt = plan.queryContext.plannerParams.targetSchemaProvider.map { provider =>
       val changes = provider.targetSchemaFunc(plan.filters)
-      val startms = plan.chunkMethod.startTime
-      val endms = plan.chunkMethod.startTime
-      findTargetSchema(changes, startms, endms).map(_.schema.toSet)
+      val startMs = plan.chunkMethod.startTime
+      val endMs = plan.chunkMethod.endTime
+      findTargetSchema(changes, startMs, endMs).map(_.schema.toSet)
     }.filter(_.isDefined).map(_.get)
     val subtree = Subtree(plan, targetSchemaColsOpt)
     Result(Seq(subtree), Map(plan.shard -> Seq(subtree)))
@@ -328,10 +210,10 @@ object BinaryJoinPushdownOpt {
 
   def optimize(plan: ExecPlan): ExecPlan = {
     val res = optimizeWalker(plan)
-    if (res.plans.size > 1) {
-      LocalPartitionDistConcatExec(plan.queryContext, plan.dispatcher, res.plans.map(_.root))
+    if (res.subtrees.size > 1) {
+      LocalPartitionDistConcatExec(plan.queryContext, plan.dispatcher, res.subtrees.map(_.root))
     } else {
-      res.plans.head.root
+      res.subtrees.head.root
     }
   }
 }
