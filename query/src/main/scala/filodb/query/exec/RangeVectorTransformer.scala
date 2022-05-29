@@ -228,7 +228,7 @@ final case class ScalarOperationMapper(operator: BinaryOperator,
           valueColumnType(sourceSchema) match {
             case ColumnType.HistogramColumn =>
               val histResRow = result.asInstanceOf[TransientHistRow]
-              val oldHist = next.getHistogram(columnNo = 1).asInstanceOf[HistogramWithBuckets]
+              val oldHist = next.getHistogram(columnNo = 1)
               if (oldHist.numBuckets > histResRow.getHistogram(col = 1).numBuckets) {
                 // If we don't have enough buckets in the TransientHistRow, we initialize and store
                 //   an appropriately-sized histogram. This should only happen once.
