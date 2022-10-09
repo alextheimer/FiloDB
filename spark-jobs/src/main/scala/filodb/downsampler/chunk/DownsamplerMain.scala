@@ -6,7 +6,7 @@ import java.time.format.DateTimeFormatter
 import kamon.Kamon
 import kamon.metric.MeasurementUnit
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
+//import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.sql.{SaveMode, SparkSession}
 
 import filodb.coordinator.KamonShutdownHook
