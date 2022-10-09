@@ -94,6 +94,8 @@ class Downsampler(settings: DownsamplerSettings,
   // scalastyle:off method.length
   def run(sparkConf: SparkConf): SparkSession = {
 
+    DownsamplerContext.dsLogger.error(s"AMTWOO pre-ipc")
+
     val spark = SparkSession.builder()
       .appName("FiloDBDownsampler")
       .config("spark.sql.sources.commitProtocolClass",  // see IdempotentCommitProtocol for details.
@@ -101,14 +103,20 @@ class Downsampler(settings: DownsamplerSettings,
       .config(sparkConf)
       .getOrCreate()
 
+    DownsamplerContext.dsLogger.error(s"AMTWOO post-ipc")
+
     // Perform additional session setup if a class is defined in the config.
+    DownsamplerContext.dsLogger.error(s"AMTWOO getting class...${settings.sparkSessionSetupClass}")
     if (settings.sparkSessionSetupClass.isDefined) {
+      DownsamplerContext.dsLogger.error(s"AMTWOO got class")
       Class.forName(settings.sparkSessionSetupClass.get)
         .getDeclaredConstructor()
         .newInstance()
         .asInstanceOf[SparkSessionSetup]
         .setup(spark, settings)
+      DownsamplerContext.dsLogger.error(s"AMTWOO loaded class")
     }
+    DownsamplerContext.dsLogger.error(s"AMTWOO after class load")
 
     DownsamplerContext.dsLogger.info(s"Spark Job Properties: ${spark.sparkContext.getConf.toDebugString}")
 
@@ -145,6 +153,7 @@ class Downsampler(settings: DownsamplerSettings,
     DownsamplerContext.dsLogger.info(s"Cassandra split size: ${splits.size}. We will have this many spark " +
       s"partitions. Tune num-token-range-splits-for-scans if parallelism is low or latency is high")
 
+    DownsamplerContext.dsLogger.error(s"AMTWOO pre rdd")
     KamonShutdownHook.registerShutdownHook()
     val rdd = spark.sparkContext
       .makeRDD(splits)
@@ -178,8 +187,10 @@ class Downsampler(settings: DownsamplerSettings,
           batchExporter.getExportRows(readablePartsBatch, userTimeStart, userTimeEndExclusive)
         } else Iterator.empty
       }
+    DownsamplerContext.dsLogger.error(s"AMTWOO post rdd")
 
     if (!rdd.isEmpty()) {
+      DownsamplerContext.dsLogger.error(s"AMTWOO pre export")
       val exportStartMs = System.currentTimeMillis()
       // NOTE: toDF(partitionCols: _*) seems buggy
       spark.createDataFrame(rdd, batchExporter.exportSchema)
@@ -190,6 +201,7 @@ class Downsampler(settings: DownsamplerSettings,
         .csv(settings.exportBucket)
       val exportEndMs = System.currentTimeMillis()
       exportLatency.record(exportEndMs - exportStartMs)
+      DownsamplerContext.dsLogger.error(s"AMTWOO post export")
     }
 
     DownsamplerContext.dsLogger.info(s"Chunk Downsampling Driver completed successfully for downsample period " +
