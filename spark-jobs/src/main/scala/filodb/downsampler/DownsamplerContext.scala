@@ -9,11 +9,11 @@ import filodb.cassandra.FiloSessionProvider
 import filodb.core.concurrentCache
 
 object DownsamplerContext extends StrictLogging {
-  lazy protected[downsampler] val dsLogger: Logger = logger
-  lazy protected[downsampler] val sessionMap = concurrentCache[Config, Session](2)
+  lazy val dsLogger: Logger = logger
+  lazy val sessionMap = concurrentCache[Config, Session](2)
 
-  lazy protected[downsampler] val readSched = Scheduler.io("cass-read-sched")
-  lazy protected[downsampler] val writeSched = Scheduler.io("cass-write-sched")
+  lazy val readSched = Scheduler.io("cass-read-sched")
+  lazy val writeSched = Scheduler.io("cass-write-sched")
 
   def getOrCreateCassandraSession(config: Config): Session = {
     import filodb.core._
