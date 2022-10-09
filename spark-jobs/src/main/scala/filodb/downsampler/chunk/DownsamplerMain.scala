@@ -16,15 +16,15 @@ import filodb.downsampler.DownsamplerContext
 import filodb.memory.format.UnsafeUtils
 
 
-/**
- * When provided as Spark's spark.sql.sources.commitProtocolClass config, file names
- *   will be written as "part-######-data-c###". This artificially fixes the JobID
- *   and enables idempotent runs, since the same files will be generated.
- * Credit: https://www.waitingforcode.com/apache-spark-sql/idempotent-file-generation-apache-spark-sql/read
- */
-class IdempotentCommitProtocol(jobId: String, path: String,
-                               dynamicPartitionOverwrite: Boolean = false)
-  extends HadoopMapReduceCommitProtocol(jobId = "data", path, dynamicPartitionOverwrite)
+///**
+// * When provided as Spark's spark.sql.sources.commitProtocolClass config, file names
+// *   will be written as "part-######-data-c###". This artificially fixes the JobID
+// *   and enables idempotent runs, since the same files will be generated.
+// * Credit: https://www.waitingforcode.com/apache-spark-sql/idempotent-file-generation-apache-spark-sql/read
+// */
+//class IdempotentCommitProtocol(jobId: String, path: String,
+//                               dynamicPartitionOverwrite: Boolean = false)
+//  extends HadoopMapReduceCommitProtocol(jobId = "data", path, dynamicPartitionOverwrite)
 
 /**
  * Implement this trait and provide its fully-qualified name as the downsampler config:
@@ -98,8 +98,8 @@ class Downsampler(settings: DownsamplerSettings,
 
     val spark = SparkSession.builder()
       .appName("FiloDBDownsampler")
-      .config("spark.sql.sources.commitProtocolClass",  // see IdempotentCommitProtocol for details.
-              "filodb.downsampler.chunk.IdempotentCommitProtocol")
+//      .config("spark.sql.sources.commitProtocolClass",  // see IdempotentCommitProtocol for details.
+//              "filodb.downsampler.chunk.IdempotentCommitProtocol")
       .config(sparkConf)
       .getOrCreate()
 
