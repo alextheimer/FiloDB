@@ -6,7 +6,6 @@ import java.time.format.DateTimeFormatter
 import kamon.Kamon
 import kamon.metric.MeasurementUnit
 import org.apache.spark.SparkConf
-//import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.sql.{SaveMode, SparkSession}
 
 import filodb.coordinator.KamonShutdownHook
@@ -35,7 +34,7 @@ trait SparkSessionSetup {
   /**
    * Additional setup code can be implemented here (to be run before the Spark job is created).
    */
-  def setup(sparkSession: SparkSession, settings: DownsamplerSettings): Unit
+  def setup(sparkConf: SparkConf): Unit
 }
 
 /**
@@ -77,6 +76,7 @@ object DownsamplerMain extends App {
 
   val d = new Downsampler(settings, batchDownsampler, batchExporter)
   val sparkConf = new SparkConf(loadDefaults = true)
+
   d.run(sparkConf)
 }
 
@@ -94,19 +94,6 @@ class Downsampler(settings: DownsamplerSettings,
   // scalastyle:off method.length
   def run(sparkConf: SparkConf): SparkSession = {
 
-    DownsamplerContext.dsLogger.error(s"AMTWOO pre-ipc")
-    Thread.sleep(2000)
-
-    val spark = SparkSession.builder()
-      .appName("FiloDBDownsampler")
-//      .config("spark.sql.sources.commitProtocolClass",  // see IdempotentCommitProtocol for details.
-//              "filodb.downsampler.chunk.IdempotentCommitProtocol")
-      .config(sparkConf)
-      .getOrCreate()
-
-    DownsamplerContext.dsLogger.error(s"AMTWOO post-ipc")
-    Thread.sleep(2000)
-
     // Perform additional session setup if a class is defined in the config.
     DownsamplerContext.dsLogger.error(s"AMTWOO getting class...${settings.sparkSessionSetupClass}")
     Thread.sleep(2000)
@@ -117,11 +104,20 @@ class Downsampler(settings: DownsamplerSettings,
         .getDeclaredConstructor()
         .newInstance()
         .asInstanceOf[SparkSessionSetup]
-        .setup(spark, settings)
+        .setup(sparkConf)
       DownsamplerContext.dsLogger.error(s"AMTWOO loaded class")
       Thread.sleep(2000)
     }
     DownsamplerContext.dsLogger.error(s"AMTWOO after class load")
+    Thread.sleep(2000)
+
+    val spark = SparkSession.builder()
+      .appName("FiloDBDownsampler")
+      //      .config("spark.sql.sources.commitProtocolClass",  // see IdempotentCommitProtocol for details.
+      //              "filodb.downsampler.chunk.IdempotentCommitProtocol")
+      .config(sparkConf)
+      .getOrCreate()
+    DownsamplerContext.dsLogger.error(s"AMTWOO post-ipc")
     Thread.sleep(2000)
 
     DownsamplerContext.dsLogger.info(s"Spark Job Properties: ${spark.sparkContext.getConf.toDebugString}")
