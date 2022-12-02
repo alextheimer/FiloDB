@@ -162,6 +162,8 @@ class Downsampler(settings: DownsamplerSettings) extends Serializable {
         } else Iterator.empty
       }
 
+    DownsamplerContext.dsLogger.info(s"AMT-COUNT total:${rdd.count()} distinct:${rdd.distinct().count()}")
+
     // Export the data produced by "getExportRows" above.
     if (!rdd.isEmpty()) {
       val exportStartMs = System.currentTimeMillis()
