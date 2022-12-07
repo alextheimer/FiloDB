@@ -3,14 +3,11 @@ package filodb.downsampler.chunk
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
-
 import scala.collection.mutable
 import scala.util.matching.Regex
-
 import kamon.Kamon
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.{DoubleType, LongType, StringType, StructField, StructType}
-
 import filodb.core.binaryrecord2.RecordSchema
 import filodb.core.metadata.Column.ColumnType.{DoubleColumn, HistogramColumn}
 import filodb.core.metadata.Schemas
@@ -21,6 +18,9 @@ import filodb.downsampler.Utils._
 import filodb.downsampler.chunk.BatchExporter.{DATE_REGEX_MATCHER, LABEL_REGEX_MATCHER}
 import filodb.memory.format.{TypedIterator, UnsafeUtils}
 import filodb.memory.format.vectors.LongIterator
+
+
+import scala.util.Random
 
 
 case class ExportRule(allowFilterGroups: Seq[Seq[ColumnFilter]],
@@ -35,7 +35,8 @@ case class ExportRowData(partKeyMap: collection.Map[String, String],
                          timestamp: Long,
                          value: Double,
                          partitionStrings: Iterator[String],
-                         dropLabels: Set[String])
+                         dropLabels: Set[String],
+                         rand: Long)
 
 object BatchExporter {
   val LABEL_REGEX_MATCHER: Regex = """\{\{(.*)\}\}""".r
@@ -57,11 +58,12 @@ case class BatchExporter(downsamplerSettings: DownsamplerSettings, userStartTime
   val exportSchema = {
     // NOTE: ArrayBuffers are sometimes used instead of Seq's because otherwise
     //   ArrayIndexOutOfBoundsExceptions occur when Spark exports a batch.
-    val fields = new mutable.ArrayBuffer[StructField](3 + downsamplerSettings.exportPathSpecPairs.size)
+    val fields = new mutable.ArrayBuffer[StructField](5 + downsamplerSettings.exportPathSpecPairs.size)
     fields.append(
       StructField("LABELS", StringType),
       StructField("TIMESTAMP", LongType),
       StructField("VALUE", DoubleType),
+      StructField("RAND", LongType),
       StructField("INDEX", LongType)
     )
     // append all partitioning columns as strings
@@ -164,11 +166,12 @@ case class BatchExporter(downsamplerSettings: DownsamplerSettings, userStartTime
    * The result Row *must* match this.exportSchema.
    */
   private def exportDataToRow(exportData: ExportRowData): Row = {
-    val dataSeq = new mutable.ArrayBuffer[Any](3 + downsamplerSettings.exportPathSpecPairs.size)
+    val dataSeq = new mutable.ArrayBuffer[Any](4 + downsamplerSettings.exportPathSpecPairs.size)
     dataSeq.append(
       exportData.labelString,
       exportData.timestamp / 1000,
-      exportData.value
+      exportData.value,
+      exportData.rand
     )
     dataSeq.appendAll(exportData.partitionStrings)
     Row.fromSeq(dataSeq)
@@ -315,7 +318,8 @@ case class BatchExporter(downsamplerSettings: DownsamplerSettings, userStartTime
     tupleIter.map{ case (pkeyMapWithBucket, labelString, timestamp, value) =>
       // NOTE: partition without histogram-adjusted labels, since we want the original metric name.
       val partitionByValues = getPartitionByValues(partKeyMap)
-      ExportRowData(pkeyMapWithBucket, labelString, timestamp, value, partitionByValues, dropLabelSet)
+      ExportRowData(pkeyMapWithBucket, labelString, timestamp,
+        value, partitionByValues, dropLabelSet, Random.nextLong())
     }
   }
   // scalastyle:on method.length
