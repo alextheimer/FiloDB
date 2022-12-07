@@ -160,12 +160,13 @@ class Downsampler(settings: DownsamplerSettings) extends Serializable {
         if (settings.exportIsEnabled) {
           batchExporter.getExportRows(readablePartsBatch)
         } else Iterator.empty
+      }.zipWithIndex()
+      .map{ case (r, i) =>
+        org.apache.spark.sql.Row.fromSeq(Seq(r.getString(0), r.getLong(1), r.getDouble(2), i))
       }
 
-    DownsamplerContext.dsLogger.info(s"AMT-COUNT total:${rdd.count()} distinct:${rdd.distinct().count()}")
-
     // Export the data produced by "getExportRows" above.
-    if (!rdd.isEmpty()) {
+    if (settings.exportIsEnabled) {
       val exportStartMs = System.currentTimeMillis()
       // NOTE: toDF(partitionCols: _*) seems buggy
       spark.createDataFrame(rdd, batchExporter.exportSchema)

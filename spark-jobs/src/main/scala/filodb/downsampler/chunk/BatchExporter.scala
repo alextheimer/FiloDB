@@ -61,7 +61,8 @@ case class BatchExporter(downsamplerSettings: DownsamplerSettings, userStartTime
     fields.append(
       StructField("LABELS", StringType),
       StructField("TIMESTAMP", LongType),
-      StructField("VALUE", DoubleType)
+      StructField("VALUE", DoubleType),
+      StructField("INDEX", LongType)
     )
     // append all partitioning columns as strings
     fields.appendAll(downsamplerSettings.exportPathSpecPairs.map(f => StructField(f._1, StringType)))
