@@ -332,6 +332,12 @@ case class BatchExporter(downsamplerSettings: DownsamplerSettings, userStartTime
       val partitionByValues = getPartitionByValues(partKeyMap)
       ExportRowData(pkeyMapWithBucket, labelString, timestamp,
         value, partitionByValues, dropLabelSet, Random.nextLong(), series_id, series_index.getAndIncrement())
+    } ++ Iterator.single {
+      // indicate the end with timestamp=1
+      val labelString = makeLabelString(partKeyMap)
+      val partitionByValues = getPartitionByValues(partKeyMap)
+      ExportRowData(partKeyMap, labelString, timestamp = 1, value = 11223344.0, partitionByValues,
+        dropLabelSet, Random.nextLong(), series_id, series_index.getAndIncrement())
     }
   }
   // scalastyle:on method.length
