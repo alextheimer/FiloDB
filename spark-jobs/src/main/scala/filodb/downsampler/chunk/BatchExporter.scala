@@ -54,6 +54,8 @@ case class BatchExporter(downsamplerSettings: DownsamplerSettings, userStartTime
 
   @transient lazy val numRowsExportPrepped = Kamon.counter("num-rows-export-prepped").withoutTags()
 
+  @transient lazy val numTimestampDuplicates = Kamon.counter("num-ts-duplicates").withoutTags()
+
   val keyToRules = downsamplerSettings.exportKeyToRules
   val exportSchema = {
     // NOTE: ArrayBuffers are sometimes used instead of Seq's because otherwise
@@ -245,6 +247,19 @@ case class BatchExporter(downsamplerSettings: DownsamplerSettings, userStartTime
     downsamplerSettings.exportDropLabels.foreach(drop => partKeyMap.remove(drop))
     rule.dropLabels.foreach(drop => partKeyMap.remove(drop))
 
+    val tsSet = new mutable.LinkedHashSet[Long]
+
+    def addToSet(ts: Long): Unit = {
+      if (tsSet.contains(ts)) {
+        numTimestampDuplicates.increment()
+      }
+      tsSet.add(ts)
+      if (tsSet.size > 10) {
+        val oldest = tsSet.iterator.next()
+        tsSet.remove(oldest)
+      }
+    }
+
     val timestampCol = 0  // FIXME: need a more dynamic (but efficient) solution
     val columns = partition.schema.data.columns
     val valueCol = columns.indexWhere(_.name == partition.schema.data.valueColName)
@@ -265,7 +280,9 @@ case class BatchExporter(downsamplerSettings: DownsamplerSettings, userStartTime
         rangeInfoIter.flatMap{ info =>
           val doubleIter = info.valueIter.asDoubleIt
           (info.irowStart to info.irowEnd).iterator.map{ _ =>
-            (partKeyMap, labelString, info.timestampIter.next, doubleIter.next)
+            val ts = info.timestampIter.next
+            addToSet(ts)
+            (partKeyMap, labelString, ts, doubleIter.next)
           }
         }
       case HistogramColumn =>
@@ -291,6 +308,7 @@ case class BatchExporter(downsamplerSettings: DownsamplerSettings, userStartTime
           (info.irowStart to info.irowEnd).iterator.flatMap{ _ =>
             val hist = histIter.next()
             val timestamp = info.timestampIter.next
+            addToSet(timestamp)
             (0 until hist.numBuckets).iterator.map{ i =>
               val bucketTopString = {
                 val raw = hist.bucketTop(i)
