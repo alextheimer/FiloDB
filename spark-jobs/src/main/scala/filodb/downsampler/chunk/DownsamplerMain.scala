@@ -162,7 +162,7 @@ class Downsampler(settings: DownsamplerSettings) extends Serializable {
         } else Iterator.empty
       }.zipWithIndex()
       .map{ case (r, i) =>
-        val s = r.toSeq.slice(0, 4) ++ Seq(i) ++  r.toSeq.slice(4, r.length)
+        val s = r.toSeq.slice(0, 6) ++ Seq(i) ++  r.toSeq.slice(6, r.length)
         org.apache.spark.sql.Row.fromSeq(s)
       }
 

@@ -20,6 +20,7 @@ import filodb.memory.format.{TypedIterator, UnsafeUtils}
 import filodb.memory.format.vectors.LongIterator
 
 
+import java.util.concurrent.atomic.AtomicLong
 import scala.util.Random
 
 
@@ -36,7 +37,9 @@ case class ExportRowData(partKeyMap: collection.Map[String, String],
                          value: Double,
                          partitionStrings: Iterator[String],
                          dropLabels: Set[String],
-                         rand: Long)
+                         rand: Long,
+                         seriesId: Long,
+                         seriesIndex: Long)
 
 object BatchExporter {
   val LABEL_REGEX_MATCHER: Regex = """\{\{(.*)\}\}""".r
@@ -54,19 +57,19 @@ case class BatchExporter(downsamplerSettings: DownsamplerSettings, userStartTime
 
   @transient lazy val numRowsExportPrepped = Kamon.counter("num-rows-export-prepped").withoutTags()
 
-  @transient lazy val numTimestampDuplicates = Kamon.counter("num-ts-duplicates").withoutTags()
-
   val keyToRules = downsamplerSettings.exportKeyToRules
   val exportSchema = {
     // NOTE: ArrayBuffers are sometimes used instead of Seq's because otherwise
     //   ArrayIndexOutOfBoundsExceptions occur when Spark exports a batch.
-    val fields = new mutable.ArrayBuffer[StructField](5 + downsamplerSettings.exportPathSpecPairs.size)
+    val fields = new mutable.ArrayBuffer[StructField](7 + downsamplerSettings.exportPathSpecPairs.size)
     fields.append(
       StructField("LABELS", StringType),
       StructField("TIMESTAMP", LongType),
       StructField("VALUE", DoubleType),
       StructField("RAND", LongType),
-      StructField("INDEX", LongType)
+      StructField("SERIES_ID", LongType),
+      StructField("SERIES_INDEX", LongType),
+      StructField("GLOBAL_INDEX", LongType),
     )
     // append all partitioning columns as strings
     fields.appendAll(downsamplerSettings.exportPathSpecPairs.map(f => StructField(f._1, StringType)))
@@ -168,12 +171,14 @@ case class BatchExporter(downsamplerSettings: DownsamplerSettings, userStartTime
    * The result Row *must* match this.exportSchema.
    */
   private def exportDataToRow(exportData: ExportRowData): Row = {
-    val dataSeq = new mutable.ArrayBuffer[Any](4 + downsamplerSettings.exportPathSpecPairs.size)
+    val dataSeq = new mutable.ArrayBuffer[Any](6 + downsamplerSettings.exportPathSpecPairs.size)
     dataSeq.append(
       exportData.labelString,
       exportData.timestamp / 1000,
       exportData.value,
-      exportData.rand
+      exportData.rand,
+      exportData.seriesId,
+      exportData.seriesIndex
     )
     dataSeq.appendAll(exportData.partitionStrings)
     Row.fromSeq(dataSeq)
@@ -247,18 +252,9 @@ case class BatchExporter(downsamplerSettings: DownsamplerSettings, userStartTime
     downsamplerSettings.exportDropLabels.foreach(drop => partKeyMap.remove(drop))
     rule.dropLabels.foreach(drop => partKeyMap.remove(drop))
 
-    val tsSet = new mutable.LinkedHashSet[Long]
-
-    def addToSet(ts: Long): Unit = {
-      if (tsSet.contains(ts)) {
-        numTimestampDuplicates.increment()
-      }
-      tsSet.add(ts)
-      if (tsSet.size > 10) {
-        val oldest = tsSet.iterator.next()
-        tsSet.remove(oldest)
-      }
-    }
+    // no concurrent execution, but just to be safe
+    val series_index = new AtomicLong(0)
+    val series_id = Random.nextLong()
 
     val timestampCol = 0  // FIXME: need a more dynamic (but efficient) solution
     val columns = partition.schema.data.columns
@@ -281,7 +277,6 @@ case class BatchExporter(downsamplerSettings: DownsamplerSettings, userStartTime
           val doubleIter = info.valueIter.asDoubleIt
           (info.irowStart to info.irowEnd).iterator.map{ _ =>
             val ts = info.timestampIter.next
-            addToSet(ts)
             (partKeyMap, labelString, ts, doubleIter.next)
           }
         }
@@ -308,7 +303,6 @@ case class BatchExporter(downsamplerSettings: DownsamplerSettings, userStartTime
           (info.irowStart to info.irowEnd).iterator.flatMap{ _ =>
             val hist = histIter.next()
             val timestamp = info.timestampIter.next
-            addToSet(timestamp)
             (0 until hist.numBuckets).iterator.map{ i =>
               val bucketTopString = {
                 val raw = hist.bucketTop(i)
@@ -337,7 +331,7 @@ case class BatchExporter(downsamplerSettings: DownsamplerSettings, userStartTime
       // NOTE: partition without histogram-adjusted labels, since we want the original metric name.
       val partitionByValues = getPartitionByValues(partKeyMap)
       ExportRowData(pkeyMapWithBucket, labelString, timestamp,
-        value, partitionByValues, dropLabelSet, Random.nextLong())
+        value, partitionByValues, dropLabelSet, Random.nextLong(), series_id, series_index.getAndIncrement())
     }
   }
   // scalastyle:on method.length
