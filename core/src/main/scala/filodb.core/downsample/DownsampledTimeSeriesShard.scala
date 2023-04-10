@@ -108,7 +108,7 @@ private val partKeyIndex = new PartKeyLuceneIndex(indexDataset, schemas.part, fa
 
   // used for initial index loading
   private val indexBootstrapper =
-    new DownsampleIndexBootstrapper(store, schemas, stats, rawDatasetRef, downsampleConfig)
+    new DownsampleIndexBootstrapper(store, schemas, stats, indexDataset, downsampleConfig)
 
   private val housekeepingSched = Scheduler.computation(
     name = "housekeeping",
