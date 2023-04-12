@@ -19,7 +19,7 @@ import filodb.core.downsample.{DownsampleConfig, DownsampledTimeSeriesShardStats
 import filodb.core.memstore.DownsampleIndexBootstrapper.currentThreadScheduler
 import filodb.core.metadata.{Schema, Schemas}
 import filodb.core.metadata.Column.ColumnType.HistogramColumn
-import filodb.core.store.{AllChunkScan, ColumnStore, PartKeyRecord, SinglePartitionScan, TimeRangeChunkScan}
+import filodb.core.store.{AllChunkScan, ColumnStore, PartKeyRecord, SinglePartitionScan}
 import filodb.memory.format.UnsafeUtils
 import filodb.memory.format.vectors.HistogramVector
 
@@ -108,11 +108,13 @@ class DownsampleIndexBootstrapper(colStore: ColumnStore,
    * Given a PartKeyRecord for a histogram, returns the count of buckets in its most-recent chunk.
    */
   private def getHistBucketCount(pk: PartKeyRecord, shardNum: Int, schema: Schema): Int = {
+    println("AMT: " + schema.partKeySchema.toHexString(pk.partKey, UnsafeUtils.arayOffset))
     val rawPartFut = colStore.readRawPartitions(
         datasetRef,
         pk.endTime,
         SinglePartitionScan(pk.partKey, shardNum),
-        TimeRangeChunkScan(pk.endTime, pk.endTime))  // we only want the most-recent chunk
+      AllChunkScan)
+//        TimeRangeChunkScan(pk.endTime, pk.endTime))  // we only want the most-recent chunk
       .headL
       .runToFuture(currentThreadScheduler)
     val readablePart = {

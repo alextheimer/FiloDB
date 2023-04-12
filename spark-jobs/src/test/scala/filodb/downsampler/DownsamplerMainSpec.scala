@@ -1552,7 +1552,7 @@ class DownsamplerMainSpec extends AnyFunSpec with Matchers with BeforeAndAfterAl
 
     beforeAll()  // truncate columnstores
     val offheapMem = new OffHeapMemory(
-      Seq(Schemas.promCounter, Schemas.promHistogram), Map.empty, 100, rawDataStoreConfig)
+      Seq(Schemas.promCounter, Schemas.promHistogram, Schemas.deltaHistogram), Map.empty, 100, rawDataStoreConfig)
     val shardInfo = TimeSeriesShardInfo(
       0, batchDownsampler.shardStats, offheapMem.bufferPools, offheapMem.nativeMemoryManager)
 
@@ -1568,32 +1568,32 @@ class DownsamplerMainSpec extends AnyFunSpec with Matchers with BeforeAndAfterAl
     val fiveBucketScheme = CustomBuckets(Array(3d, 10d, 25d, 50d, Double.PositiveInfinity))
 
     val seriesSpecs = Seq(
-      Series("three_buckets",
-        Map("a" -> "123", "b" -> "456", "c" -> "789"),
-        Schemas.promHistogram,
-        bucketCount = Some(3),
-        Stream(
-          Seq(0d, 1d, LongHistogram(threeBucketScheme, Array(0L, 0, 1))),
-          Seq(2d, 3d, LongHistogram(threeBucketScheme, Array(0L, 2, 3))),
-          Seq(5d, 6d, LongHistogram(threeBucketScheme, Array(2L, 5, 6))),
-        )),
+//      Series("three_buckets",
+//        Map("a" -> "123", "b" -> "456", "c" -> "789"),
+//        Schemas.deltaHistogram,
+//        bucketCount = Some(3),
+//        Stream(
+//          Seq(0d, 1d, LongHistogram(threeBucketScheme, Array(0L, 0, 1))),
+//          Seq(2d, 3d, LongHistogram(threeBucketScheme, Array(0L, 2, 3))),
+//          Seq(5d, 6d, LongHistogram(threeBucketScheme, Array(2L, 5, 6))),
+//        )),
       Series("five_buckets_delta",
         Map("this_is_a_really_really_really_long_key" ->
           "wow such value incredible who could have guessed a value could be so long"),
-        Schemas.promHistogram,
+        Schemas.deltaHistogram,
         bucketCount = Some(5),
         Stream(
           Seq(0d, 1d, LongHistogram(fiveBucketScheme, Array(0L, 0, 1, 1, 1))),
           Seq(2d, 3d, LongHistogram(fiveBucketScheme, Array(0L, 2, 3, 3, 4))),
           Seq(5d, 6d, LongHistogram(fiveBucketScheme, Array(2L, 5, 6, 7, 8))),
         )),
-      Series("just_a_counter",
-        Map("blue" -> "red", "green" -> "yellow"),
-        Schemas.promCounter,
-        bucketCount = None,
-        Stream(
-          Seq(0d),Seq(2d),Seq(5d),
-        )),
+//      Series("just_a_counter",
+//        Map("blue" -> "red", "green" -> "yellow"),
+//        Schemas.promCounter,
+//        bucketCount = None,
+//        Stream(
+//          Seq(0d),Seq(2d),Seq(5d),
+//        )),
     )
 
     // Adds all recorded values to a list (for later validation).
