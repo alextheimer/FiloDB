@@ -87,8 +87,8 @@ object Dependencies {
     "com.googlecode.javaewah"      % "JavaEWAH"           % "1.1.6" withJavadoc(),
     "com.github.rholder.fauxflake" % "fauxflake-core"     % "1.1.0",
     "org.scalactic"                %% "scalactic"         % "3.1.2" withJavadoc(),
-    "org.apache.lucene"            % "lucene-core"        % "9.7.0" withJavadoc(),
-    "org.apache.lucene"            % "lucene-facet"       % "9.7.0" withJavadoc(),
+    "org.apache.lucene"            % "lucene-core"        % "8.8.2" withJavadoc(),
+    "org.apache.lucene"            % "lucene-facet"       % "8.8.2" withJavadoc(),
     "com.github.alexandrnikitin"   %% "bloom-filter"      % "0.13.1", // Updated for Scala 2.13
     "org.rocksdb"                  % "rocksdbjni"         % "6.29.5",
     "com.esotericsoftware"         % "kryo"               % "4.0.0" excludeAll(excludeMinlog),
