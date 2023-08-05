@@ -33,7 +33,7 @@ class ShardKeyRegexPlanner(val dataset: Dataset,
                            shardKeyMatcher: Seq[ColumnFilter] => Seq[Seq[ColumnFilter]],
                            config: QueryConfig,
                            _targetSchemaProvider: TargetSchemaProvider = StaticTargetSchemaProvider())
-  extends QueryPlanner with DefaultPlanner {
+  extends MultiPartitionRegexPlannerBase with QueryPlanner with DefaultPlanner {
 
   override def queryConfig: QueryConfig = config
   override val schemas: Schemas = Schemas(dataset.schema)
@@ -42,11 +42,6 @@ class ShardKeyRegexPlanner(val dataset: Dataset,
 
   private def targetSchemaProvider(qContext: QueryContext): TargetSchemaProvider = {
     qContext.plannerParams.targetSchemaProviderOverride.getOrElse(_targetSchemaProvider)
-  }
-
-  private def getShardKeys(plan: LogicalPlan): Seq[Seq[ColumnFilter]] = {
-    LogicalPlan.getNonMetricShardKeyFilters(plan, dataset.options.shardKeyColumns)
-      .flatMap(shardKeyMatcher(_))
   }
 
   /**
