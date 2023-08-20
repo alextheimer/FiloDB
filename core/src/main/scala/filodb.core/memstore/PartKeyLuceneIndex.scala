@@ -337,7 +337,7 @@ class PartKeyLuceneIndex(ref: DatasetRef,
       endTimeDv.setLongValue(endTime)
       partKeyDv.setBytesValue(partKey)
 
-      document.add(partIdField)
+//      document.add(partIdField)
       document.add(partKeyDv)
       document.add(startTimeField)
       document.add(startTimeDv)
