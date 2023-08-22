@@ -325,11 +325,12 @@ class PartKeyLuceneIndex(ref: DatasetRef,
       fieldNames.clear()
       facetsConfig = new FacetsConfig
 
+      partIdField.setStringValue(documentId)
+      document.add(partIdField)
       if(partId > -1) {
         partIdDv.setLongValue(partId)
         document.add(partIdDv)
       }
-//      partIdField.setStringValue(documentId)
 
       startTimeField.setLongValue(startTime)
       startTimeDv.setLongValue(startTime)
@@ -337,7 +338,6 @@ class PartKeyLuceneIndex(ref: DatasetRef,
       endTimeDv.setLongValue(endTime)
       partKeyDv.setBytesValue(partKey)
 
-//      document.add(partIdField)
       document.add(partKeyDv)
       document.add(startTimeField)
       document.add(startTimeDv)
