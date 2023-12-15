@@ -11,7 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import kamon.Kamon
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.types.{DoubleType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 import filodb.core.binaryrecord2.RecordSchema
 import filodb.core.metadata.Column.ColumnType.{DoubleColumn, HistogramColumn}
@@ -65,14 +65,10 @@ case class BatchExporter(downsamplerSettings: DownsamplerSettings, userStartTime
   val exportSchema = {
     // NOTE: ArrayBuffers are sometimes used instead of Seq's because otherwise
     //   ArrayIndexOutOfBoundsExceptions occur when Spark exports a batch.
-    val fields = new mutable.ArrayBuffer[StructField](3 + downsamplerSettings.exportPathSpecPairs.size)
+    val fields = new mutable.ArrayBuffer[StructField](1)
     fields.append(
-      StructField("LABELS", StringType),
-      StructField("TIMESTAMP", LongType),
-      StructField("VALUE", DoubleType)
+      StructField("WOAH", StringType)
     )
-    // append all partitioning columns as strings
-    fields.appendAll(downsamplerSettings.exportPathSpecPairs.map(f => StructField(f._1, StringType)))
     StructType(fields)
   }
   val partitionByNames = {

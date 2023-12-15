@@ -2,17 +2,15 @@ package filodb.downsampler.chunk
 
 import java.time.Instant
 import java.time.format.DateTimeFormatter
-
 import kamon.Kamon
 import kamon.metric.MeasurementUnit
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.SparkSession
-
+import org.apache.spark.sql.{Row, SparkSession}
 import filodb.coordinator.KamonShutdownHook
-import filodb.core.binaryrecord2.RecordSchema
-import filodb.core.memstore.PagedReadablePartition
 import filodb.downsampler.DownsamplerContext
-import filodb.memory.format.UnsafeUtils
+
+
+import java.util.concurrent.Executors
 
 /**
  * Implement this trait and provide its fully-qualified name as the downsampler config:
@@ -127,57 +125,63 @@ class Downsampler(settings: DownsamplerSettings) extends Serializable {
       s"partitions. Tune num-token-range-splits-for-scans if parallelism is low or latency is high")
 
     KamonShutdownHook.registerShutdownHook()
-    val rdd = spark.sparkContext
-      .makeRDD(splits)
-      .mapPartitions { splitIter =>
-        Kamon.init()
-        KamonShutdownHook.registerShutdownHook()
-        val rawDataSource = batchDownsampler.rawCassandraColStore
-        val batchIter = rawDataSource.getChunksByIngestionTimeRangeNoAsync(
-          datasetRef = batchDownsampler.rawDatasetRef,
-          splits = splitIter, ingestionTimeStart = ingestionTimeStart,
-          ingestionTimeEnd = ingestionTimeEnd,
-          userTimeStart = userTimeStart, endTimeExclusive = userTimeEndExclusive,
-          maxChunkTime = settings.rawDatasetIngestionConfig.storeConfig.maxChunkTime.toMillis,
-          batchSize = settings.batchSize,
-          cassFetchSize = settings.cassFetchSize)
-        batchIter
-      }
-      .flatMap { rawPartsBatch =>
-        Kamon.init()
-        KamonShutdownHook.registerShutdownHook()
-        // convert each RawPartData to a ReadablePartition
-        val readablePartsBatch = rawPartsBatch.map{ rawPart =>
-          val rawSchemaId = RecordSchema.schemaID(rawPart.partitionKey, UnsafeUtils.arayOffset)
-          val rawPartSchema = batchDownsampler.schemas(rawSchemaId)
-          new PagedReadablePartition(rawPartSchema, shard = 0, partID = 0, partData = rawPart, minResolutionMs = 1)
-        }
-        // Downsample the data (this step does not contribute the the RDD).
-        if (settings.chunkDownsamplerIsEnabled) {
-          batchDownsampler.downsampleBatch(readablePartsBatch)
-        }
-        // Generate the data for the RDD.
-        if (settings.exportIsEnabled) {
-          batchExporter.getExportRows(readablePartsBatch)
-        } else Iterator.empty
-      }
 
-    // Export the data produced by "getExportRows" above.
-    if (settings.exportIsEnabled) {
-      val exportStartMs = System.currentTimeMillis()
-      // NOTE: toDF(partitionCols: _*) seems buggy
-      spark.createDataFrame(rdd, batchExporter.exportSchema)
-        .write
-        .format(settings.exportFormat)
-        .mode(settings.exportSaveMode)
-        .options(settings.exportOptions)
-        .partitionBy(batchExporter.partitionByNames: _*)
-        .save(settings.exportBucket)
-      val exportEndMs = System.currentTimeMillis()
-      exportLatency.record(exportEndMs - exportStartMs)
-    } else {
-      rdd.foreach(_ => {})
+    println(spark.sparkContext.getConf.toDebugString)
+//    println(spark.sparkContext.getConf
+//      .get("spark.sql.shuffle.partitions"))
+//    println(spark.sparkContext.getConf
+//      .get("spark.executor.instances"))
+
+//    System.exit(1)
+//    System.exit(1)
+
+    val rdd = spark.sparkContext
+      .makeRDD((0 until 1000))
+      .flatMap { i =>
+        Kamon.init()
+        KamonShutdownHook.registerShutdownHook()
+        Iterator.range(1, 10000000)
+          .map(j => {
+            println("generating i: " + i + "; j: " + j)
+            "A" * 1000000
+          })
+      }
+      .map(s => Row.fromSeq(Seq(s)))
+    val exportStartMs = System.currentTimeMillis()
+
+    val rdd2 = rdd.filter { r =>
+      r.size > 0
     }
+
+    // NOTE: toDF(partitionCols: _*) seems buggy
+    val s1 = () => spark.createDataFrame(rdd, batchExporter.exportSchema)
+      .write
+      .format(settings.exportFormat)
+      .mode(settings.exportSaveMode)
+      .options(settings.exportOptions)
+      .save(settings.exportBucket)
+
+    val s2 = () => spark.createDataFrame(rdd2, batchExporter.exportSchema)
+      .write
+      .format(settings.exportFormat)
+      .mode(settings.exportSaveMode)
+      .options(settings.exportOptions)
+      .save(settings.exportBucket + "/double-woah")
+//
+    val e = Executors.newFixedThreadPool(2)
+
+    val f1 = e.submit(new Runnable {
+      override def run(): Unit = s1.apply()
+    })
+    val f2 = e.submit(new Runnable {
+      override def run(): Unit = s2.apply()
+    })
+
+    f1.get()
+    f2.get()
+
+    val exportEndMs = System.currentTimeMillis()
+    exportLatency.record(exportEndMs - exportStartMs)
 
     DownsamplerContext.dsLogger.info(s"Chunk Downsampling Driver completed successfully for downsample period " +
       s"$downsamplePeriodStr")
