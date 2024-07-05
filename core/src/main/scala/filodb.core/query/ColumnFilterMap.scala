@@ -30,7 +30,8 @@ import scala.collection.mutable.ArrayBuffer
  *   (described in the method's javadoc) is insufficient.
  *
  * @tparam T the type of elements to store/return.
- * @param filterElementPairs (filter-set,element) pairs
+ * @param filterElementPairs (filter-set,element) pairs; all filtered columns *must* exist in
+ *                           all label-value maps passed to get()
  */
 class ColumnFilterMap[T](filterElementPairs: Iterable[(Iterable[ColumnFilter], T)]){
 
@@ -141,13 +142,8 @@ class ColumnFilterMap[T](filterElementPairs: Iterable[(Iterable[ColumnFilter], T
    *   This data-structure should only be used where each of these is reasonably small.
    */
   def get(labels: collection.Map[String, String]): Option[T] = {
-    // The maps we've built require that certain labels are present in the set.
-    // Identify the set of (map, labels-names) pairs s.t. all labels are present,
-    //   then map these to the set of (map, label-values) pairs for efficiency.
     labelSeqToMap
-      .map{ case (filterLabels, map) => (map, filterLabels.map(labels.get)) }  // Get all value options.
-      .filter { case (_, filterValues) => filterValues.forall(_.isDefined) }   // Make sure all are defined.
-      .map { case (map, filterValues) => (map, filterValues.map(_.get)) }      // Extract the values.
+      .map { case (filterLabels, valuesMap) => (valuesMap, filterLabels.map(labels(_))) }
       .map { case (valuesMap, values) =>
         valuesMap.get(values).flatMap {
           case Left(filtersToElts) =>
@@ -156,7 +152,8 @@ class ColumnFilterMap[T](filterElementPairs: Iterable[(Iterable[ColumnFilter], T
               //   - contains labels for all filter columns.
               //   - matches all filters.
               filters.forall { filter =>
-                labels.get(filter.column).exists(value => filter.filter.filterFunc(value))
+                val value = labels(filter.column)
+                filter.filter.filterFunc(value)
               }
             }.map { case (filters, elt) => elt }
           case Right(elt) =>

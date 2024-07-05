@@ -31,21 +31,18 @@ class ColumnFilterMapSpec extends AnyFunSpec with Matchers {
       cfMap.get(Map("a" -> "a")).get shouldEqual "foo"
       cfMap.get(Map("a" -> "a", "b" -> "b")).get shouldEqual "foo"
       cfMap.get(Map("a" -> "b")) shouldEqual None
-      cfMap.get(Map("b" -> "b")) shouldEqual None
       cfMap.get(Map("a" -> "b", "b" -> "a")) shouldEqual None
-      cfMap.get(Map()) shouldEqual None
     }
 
     {
       // single regex filter
       val entries = Seq(
-        (Seq(regex("a", ".*")), "foo")
+        (Seq(regex("a", "a.*")), "foo")
       )
       val cfMap = new ColumnFilterMap[String](entries)
-      cfMap.get(Map("a" -> "hello")).get shouldEqual "foo"
-      cfMap.get(Map("a" -> "hello", "b" -> "goodbye")).get shouldEqual "foo"
-      cfMap.get(Map("b" -> "hello")) shouldEqual None
-      cfMap.get(Map()) shouldEqual None
+      cfMap.get(Map("a" -> "DNE")) shouldEqual None
+      cfMap.get(Map("a" -> "a123")).get shouldEqual "foo"
+      cfMap.get(Map("a" -> "a123", "b" -> "hello")).get shouldEqual "foo"
     }
 
     {
@@ -58,31 +55,24 @@ class ColumnFilterMapSpec extends AnyFunSpec with Matchers {
           equals("d", "d")), "foo")
       )
       val cfMap = new ColumnFilterMap[String](entries)
-      cfMap.get(Map("a" -> "hello")) shouldEqual None
-      cfMap.get(Map("b" -> "b", "d" -> "d")) shouldEqual None
-      cfMap.get(Map("a" -> "aaa123", "c" -> "ccc123")) shouldEqual None
+      cfMap.get(Map("a" -> "DNE", "b" -> "b", "c" -> "ccc123", "d" -> "d")) shouldEqual None
       cfMap.get(Map("a" -> "aaa123", "b" -> "b", "c" -> "ccc123", "d" -> "d")).get shouldEqual "foo"
       cfMap.get(Map("a" -> "aaa123", "b" -> "b", "c" -> "ccc123", "d" -> "d", "e" -> "e")).get shouldEqual "foo"
-      cfMap.get(Map("e" -> "e")) shouldEqual None
-      cfMap.get(Map()) shouldEqual None
     }
 
     {
       // multiple sets with single filter
       val entries = Seq(
-        (Seq(regex("a", ".*")), "a"),
-        (Seq(regex("b", ".*")), "b"),
+        (Seq(regex("a", "a.*")), "a"),
+        (Seq(regex("b", "b.*")), "b"),
         (Seq(equals("c", "c")), "c"),
       )
       val cfMap = new ColumnFilterMap[String](entries)
-      cfMap.get(Map("a" -> "hello")).get shouldEqual "a"
-      cfMap.get(Map("b" -> "hello")).get shouldEqual "b"
-      cfMap.get(Map("c" -> "hello")) shouldEqual None
-      cfMap.get(Map("d" -> "d")) shouldEqual None
-      cfMap.get(Map("c" -> "c")).get shouldEqual "c"
-      cfMap.get(Map()) shouldEqual None
-      cfMap.get(Map("a" -> "hello", "b" -> "hello")).isDefined shouldEqual true
-      cfMap.get(Map("a" -> "hello", "b" -> "hello", "d" -> "d")).isDefined shouldEqual true
+      cfMap.get(Map("a" -> "DNE", "b" -> "DNE", "c" -> "DNE")) shouldEqual None
+      cfMap.get(Map("a" -> "a123", "b" -> "DNE", "c" -> "DNE")).get shouldEqual "a"
+      cfMap.get(Map("a" -> "DNE", "b" -> "b123", "c" -> "DNE")).get shouldEqual "b"
+      cfMap.get(Map("a" -> "DNE", "b" -> "DNE", "c" -> "c")).get shouldEqual "c"
+      cfMap.get(Map("a" -> "a123", "b" -> "b123", "c" -> "c")).isDefined shouldEqual true
     }
 
     {
@@ -114,17 +104,17 @@ class ColumnFilterMapSpec extends AnyFunSpec with Matchers {
           regex("c", "ccc.*")), "4r"),
       )
       val cfMap = new ColumnFilterMap[String](entries)
-      cfMap.get(Map()) shouldEqual None
-      cfMap.get(Map("a" -> "b")) shouldEqual None
-      cfMap.get(Map("d" -> "d")) shouldEqual None
-      cfMap.get(Map("a" -> "a")).get shouldEqual "1"
-      cfMap.get(Map("a" -> "a", "b" -> "b")).isDefined shouldEqual true
+      cfMap.get(Map("a" -> "DNE", "b" -> "DNE", "c" -> "DNE")) shouldEqual None
+      cfMap.get(Map("a" -> "a", "b" -> "DNE", "c" -> "DNE")).get shouldEqual "1"
+      cfMap.get(Map("a" -> "DNE", "b" -> "DNE", "c" -> "DNE", "d" -> "d")) shouldEqual None
+      cfMap.get(Map("a" -> "a", "b" -> "DNE", "c" -> "DNE", "d" -> "d")).get shouldEqual "1"
+      cfMap.get(Map("a" -> "a", "b" -> "b", "c" -> "DNE")).isDefined shouldEqual true
       cfMap.get(Map("a" -> "a", "b" -> "b", "c" -> "c")).isDefined shouldEqual true
-      cfMap.get(Map("b" -> "b", "c" -> "c")).get shouldEqual "4"
-      cfMap.get(Map("a" -> "aaa123")).get shouldEqual "1r"
-      cfMap.get(Map("a" -> "aaa123", "b" -> "bbb123")).isDefined shouldEqual true
+      cfMap.get(Map("a" -> "DNE", "b" -> "b", "c" -> "c")).get shouldEqual "4"
+      cfMap.get(Map("a" -> "aaa123", "b" -> "DNE", "c" -> "DNE")).get shouldEqual "1r"
+      cfMap.get(Map("a" -> "aaa123", "b" -> "bbb123", "c" -> "DNE")).isDefined shouldEqual true
       cfMap.get(Map("a" -> "aaa123", "b" -> "bbb123", "c" -> "ccc123")).isDefined shouldEqual true
-      cfMap.get(Map("b" -> "bbb123", "c" -> "ccc123")).get shouldEqual "4r"
+      cfMap.get(Map("a" -> "DNE", "b" -> "bbb123", "c" -> "ccc123")).get shouldEqual "4r"
     }
   }
 }

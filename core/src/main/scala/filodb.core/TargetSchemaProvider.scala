@@ -42,14 +42,17 @@ final case class ColumnFilterMapTargetSchemaProvider(columnFilterMap: ColumnFilt
 object ColumnFilterMapTargetSchemaProvider {
   /**
    * @param filterChangePairs (filters,changes) pairs used to populate the backing ColumnFilterMap;
-   *                          at most one of 'filters' can be a non-Equals filter.
+   *                          filters must be against shard-key columns only.
    */
-  def apply(filterChangePairs: Iterable[(
-      Iterable[ColumnFilter],
-      Iterable[TargetSchemaChange]
-    )]): ColumnFilterMapTargetSchemaProvider = {
+  def apply(shardKeyColumns: Set[String],
+            filterChangePairs: Iterable[(
+              Iterable[ColumnFilter],
+              Iterable[TargetSchemaChange]
+            )]): ColumnFilterMapTargetSchemaProvider = {
     val columnFilterMap = {
       val sortedFilterChangePairs = filterChangePairs.map { case (filters, changes) =>
+        assert(filters.forall(filter => shardKeyColumns.contains(filter.column)),
+          "expected only shard-key filters, but found: " + filters)
         (filters, changes.toSeq.sortBy(_.time))
       }
       new ColumnFilterMap[Seq[TargetSchemaChange]](sortedFilterChangePairs)
