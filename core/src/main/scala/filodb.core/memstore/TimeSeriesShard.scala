@@ -1144,36 +1144,27 @@ class TimeSeriesShard(val ref: DatasetRef,
               // ingestion in updateIndexWithEndTime during the wait time of lock acquisition.
               // DO NOT remove the second tsp.ingesting check without understanding this fully.
               updatePartEndTimeInIndex(part.asInstanceOf[TimeSeriesPartition], Long.MaxValue)
-
-              // Roughly how active-series counters might be scaled by histogram bucket counts...
-              val shardKeyCols = schema.options.shardKeyColumns
-              val shardKeyLabels = shardKeyCols.zip(
-                schema.partKeySchema.colValues(
-                    tsp.partKeyBase, tsp.partKeyOffset, shardKeyCols)
-              ).toMap
-              if (Set(/* TODO: some sort of "isHistogram" check */).contains(schema.data.hash)) {
-                val histColIdx = Map(/*TODO: keep hash->histIndex for better performance*/)(schema.data.hash)
-                val numBuckets = brRowReader.getHistogram(histColIdx).numBuckets
-                val samplesPerBucket = 1  // TODO: make this configurable.
-                val numSamples = numBuckets * samplesPerBucket
-                // TODO: the gauge below needs an "increment" method.
-                shardStats.numActivelyIngestingParts.update(numSamples, shardKeyLabels)
-              } else {
-                shardStats.numActivelyIngestingParts.update(1, shardKeyLabels)
-              }
-              // TODO: We'd need to at least track an initial bucket count per series.
-              //   Otherwise, we would not know how much to decrement when the series stops ingesting.
-              // TODO: Bucket count might change over time. Unless logic similar to the above is invoked
-              //   periodically for all series, it's possible some histogram series will be way
-              //   over/under-counted.
-
               dirtyPartitionsForIndexFlush += part.partID
               activelyIngesting += part.partID
               tsp.ingesting = true
               val shardKey = tsp.schema.partKeySchema.colValues(tsp.partKeyBase, tsp.partKeyOffset,
                 tsp.schema.options.shardKeyColumns)
               if (storeConfig.meteringEnabled) {
-                modifyCardinalityCountNoThrow(shardKey, 0, 1)
+
+                // Roughly how active-series counters might be scaled by histogram bucket counts...
+                val weightedCardinality = if (Set(/* TODO: some sort of "isHistogram" check */).contains(schema.data.hash)) {
+                  val histColIdx = Map(/*TODO: keep hash->histIndex for better performance*/)(schema.data.hash)
+                  val numBuckets = brRowReader.getHistogram(histColIdx).numBuckets
+                  val seriesPerBucket = 1 // TODO: make this configurable.
+                  numBuckets * seriesPerBucket
+                } else 1
+                // TODO: We'd need to at least store an initial bucket count per series.
+                //   Otherwise, we would not know how much to decrement when the series stops ingesting.
+                // TODO: Bucket count might change over time. Unless logic similar to the above is invoked
+                //   periodically for all series, it's possible some histogram series will be way
+                //   over/under-counted.
+
+                modifyCardinalityCountNoThrow(shardKey, 0, weightedCardinality)
               }
             }
           }
