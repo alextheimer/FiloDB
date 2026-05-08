@@ -29,7 +29,7 @@ object Dependencies {
   val sparkVersion      = "3.4.0"
   val sttpVersion       = "1.7.2" // Updated for Scala 2.13
   val grpcVersion       = "1.50.0"
-  val arrowVersion      = "11.0.0" // latest version is 15, but unfortunately it breaks Spark compatibility; we cannot
+  val arrowVersion      = "15.0.2" // latest version is 15, but unfortunately it breaks Spark compatibility; we cannot
                                    // move to spark 4.0 yet; when we do move to Spark 4.0, do upgrade Arrow as well
 
   /* Dependencies shared */

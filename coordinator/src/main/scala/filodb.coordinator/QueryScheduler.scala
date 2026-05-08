@@ -1,8 +1,7 @@
 package filodb.coordinator
 
-
 import java.lang.Thread.UncaughtExceptionHandler
-import java.util.concurrent.{ForkJoinPool, ForkJoinWorkerThread}
+import java.util.concurrent.{Executors, ForkJoinPool, ForkJoinWorkerThread}
 
 import com.typesafe.scalalogging.StrictLogging
 import monix.execution.Scheduler
@@ -28,15 +27,12 @@ object QueryScheduler extends StrictLogging {
   }
   val queryScheduler: SchedulerService = createInstrumentedQueryScheduler()
 
-  val flightIoScheduler: SchedulerService = Scheduler.io(FlightIoSchedName, reporter = (ex: Throwable) => {
-    logger.error("Uncaught Exception in Flight IO Scheduler", ex)
-    ex match {
-      case ie: InternalError => Shutdown.haltAndCatchFire(ie)
-      case _ => {
-        /* Do nothing. */
-      }
-    }
-  })
+  val flightIoScheduler: SchedulerService = Scheduler.apply(Executors.newThreadPerTaskExecutor(
+    Thread.ofVirtual()
+      .name(FlightIoSchedName, 0)
+      .uncaughtExceptionHandler(exceptionHandler)
+      .factory()
+  ))
 
   /**
    * Instrumentation adds following metrics on the Query Scheduler
@@ -54,20 +50,19 @@ object QueryScheduler extends StrictLogging {
   private def createInstrumentedQueryScheduler(): SchedulerService = {
     val numSchedThreads = Math.ceil(GlobalConfig.systemConfig.getDouble("filodb.query.threads-factor")
       * sys.runtime.availableProcessors).toInt
-    val schedName = s"$QuerySchedName"
 
     val threadFactory = new ForkJoinPool.ForkJoinWorkerThreadFactory {
       def newThread(pool: ForkJoinPool): ForkJoinWorkerThread = {
         val thread = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool)
         thread.setDaemon(true)
         thread.setUncaughtExceptionHandler(exceptionHandler)
-        thread.setName(s"$schedName-${thread.getPoolIndex}")
+        thread.setName(QuerySchedName)
         thread
       }
     }
     val executor = new ForkJoinPool(numSchedThreads, threadFactory, exceptionHandler, true)
 
-    Scheduler.apply(FilodbMetrics.instrumentExecutor(executor, schedName))
+    Scheduler.apply(FilodbMetrics.instrumentExecutor(executor, QuerySchedName))
   }
 
 }
