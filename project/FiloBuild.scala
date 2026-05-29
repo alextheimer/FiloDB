@@ -128,6 +128,7 @@ object Submodules {
     .dependsOn(cassandra, core % "compile->compile; test->test")
     .settings(
       commonSettings,
+      FiloSettings.testSettings,
       name := "spark-jobs",
       fork in Test := true,
       Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat,
