@@ -26,11 +26,10 @@ object Dependencies {
   val otelVersion       = "1.54.1"
   val otelInstVersion   = "2.20.1-alpha"
   val monixKafkaVersion = "1.0.0-RC7"
-  val sparkVersion      = "3.4.0"
+  val sparkVersion      = "4.0.0"
   val sttpVersion       = "1.7.2" // Updated for Scala 2.13
   val grpcVersion       = "1.50.0"
-  val arrowVersion      = "15.0.2" // latest version is 15, but unfortunately it breaks Spark compatibility; we cannot
-                                   // move to spark 4.0 yet; when we do move to Spark 4.0, do upgrade Arrow as well
+  val arrowVersion      = "15.0.2"
 
   /* Dependencies shared */
   val logbackDep        = "ch.qos.logback"             % "logback-classic"       % "1.5.6"
@@ -177,7 +176,7 @@ object Dependencies {
     "com.google.protobuf"    % "protobuf-java"             % "2.5.0",
     "org.scala-lang.modules" %% "scala-parser-combinators" % "1.1.2", // Updated for Scala 2.13
     "com.softwaremill.quicklens" %% "quicklens"            % "1.9.7", // Updated for Scala 2.13
-    "org.antlr" % "antlr4-runtime" % "4.9.1"
+    "org.antlr" % "antlr4-runtime" % "4.13.1"
   )
 
   lazy val gatewayDeps = commonDeps ++ Seq(
